@@ -1,0 +1,33 @@
+# --- Segredos e ficheiros de runtime (nunca entram no repositório) ---
+config.yaml
+*.local.yaml
+.env
+.env.*
+!.env.example
+accounts.json
+state*.json
+*.db
+*.log
+.lock
+discovery_dump*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Editores e sistema operativo ---
+.idea/
+.vscode/
+.DS_Store
+.claude/

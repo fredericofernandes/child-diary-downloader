@@ -1,0 +1,39 @@
+# Configuração do child-diary-downloader.
+# Copia para config.yaml (na pasta de configuração) e adapta.
+# Todos os nomes e IDs abaixo são fictícios.
+#
+# Valores no formato ${NOME} são lidos das variáveis de ambiente ou do
+# ficheiro .env ao lado deste. Guarda aí as passwords e o token.
+
+# Pasta raiz do arquivo: <archive_dir>/<Criança>/<Ano>/<Data>/...
+archive_dir: ~/Pictures/Child-Diary
+
+telegram:
+  token: ${CDD_TELEGRAM_TOKEN}
+  chat_id: ${CDD_TELEGRAM_CHAT_ID}
+  # Entradas mais antigas do que isto são arquivadas sem notificar.
+  max_age_days: 3
+
+# Uma conta por login no ChildDiary. Cada conta pode ter várias crianças.
+accounts:
+  - name: Creche Exemplo
+    username: familia.exemplo@example.com
+    password: ${CDD_PASSWORD_CRECHE}
+    # ID da criança na API -> nome da pasta. Descobre os IDs com `childdiary list-groups`.
+    children:
+      "00000000-0000-0000-0000-000000000001": Maria
+      "00000000-0000-0000-0000-000000000002": Tomás
+
+# Para onde vão os posts que não são dirigidos a uma criança em concreto.
+routing:
+  # Posts de salas/actividades -> pasta(s) de criança.
+  groups:
+    "Sala Girassóis": [Maria]
+    "Sala Papoilas": [Tomás]
+    "Música Girassóis + Papoilas": [Maria, Tomás]
+  # Posts da escola inteira -> pasta(s) de criança.
+  instances:
+    "Creche Exemplo": [Maria, Tomás]
+  # Ignora posts de escola anteriores à entrada de cada criança (AAAA-MM-DD).
+  child_since:
+    Tomás: "2025-09-01"
