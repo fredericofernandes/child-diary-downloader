@@ -71,8 +71,14 @@ def run_account(
     state: State,
     state_file: Path,
     notifier: Notifier,
+    *,
+    dry_run: bool = False,
 ) -> tuple[int, int]:
-    """Process the new entries of one account. Returns (processed, failed)."""
+    """Process the new entries of one account. Returns (processed, failed).
+
+    With ``dry_run`` nothing is downloaded, written or sent: the log shows what
+    would happen and the state is left untouched.
+    """
     name = account.name
     children = account.children
     ctx = ArchiveContext(
@@ -139,14 +145,18 @@ def run_account(
         except ValueError:
             pass
         log.info(
-            "[%s] Processing type=%s folders=%s prefix=%r date=%s%s",
+            "[%s] %s type=%s folders=%s prefix=%r date=%s%s",
             name,
+            "Would process" if dry_run else "Processing",
             entry_type,
             folders,
             prefix.strip(),
             created_on[:10],
             " (old: archive only)" if entry_notifier is silent else "",
         )
+        if dry_run:
+            processed += 1
+            continue
 
         try:
             handler = (
@@ -167,5 +177,11 @@ def run_account(
         state.save(state_file)
         processed += 1
 
-    log.info("[%s] Done. %d processed, %d failed.", name, processed, failed)
+    log.info(
+        "[%s] Done. %d %s, %d failed.",
+        name,
+        processed,
+        "would be processed" if dry_run else "processed",
+        failed,
+    )
     return processed, failed

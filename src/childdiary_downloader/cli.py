@@ -15,7 +15,8 @@ from rich.table import Table
 
 from childdiary_downloader import __version__
 from childdiary_downloader.api import set_request_delay
-from childdiary_downloader.config import Config, ConfigError, load_config
+from childdiary_downloader.checks import run_checks
+from childdiary_downloader.config import DEFAULT_ARCHIVE_DIR, Config, ConfigError, load_config
 from childdiary_downloader.logging_setup import setup_logging
 from childdiary_downloader.notify import Notifier, NullNotifier, Telegram
 from childdiary_downloader.paths import RuntimePaths, default_config_file, default_data_dir
@@ -27,6 +28,7 @@ from childdiary_downloader.scheduler import (
     run_daemon,
     validate_schedule,
 )
+from childdiary_downloader.setup_wizard import run_wizard
 from childdiary_downloader.state import State
 
 log = logging.getLogger(__name__)
@@ -85,7 +87,12 @@ def main(
     ctx.obj = app
 
 
-def execute_run(app: App, no_telegram: bool = False, archive_dir: Path | None = None) -> int:
+def execute_run(
+    app: App,
+    no_telegram: bool = False,
+    archive_dir: Path | None = None,
+    dry_run: bool = False,
+) -> int:
     """One full run over every account. Returns the process exit code."""
     # Prevent overlapping runs (manual + scheduled).
     lock_fh = app.paths.lock_file.open("w")
@@ -105,22 +112,26 @@ def execute_run(app: App, no_telegram: bool = False, archive_dir: Path | None = 
             Telegram(config.telegram.token, config.telegram.chat_id) if config.telegram else None
         )
         notifier: Notifier = (
-            NullNotifier() if (no_telegram or real_notifier is None) else real_notifier
+            NullNotifier() if (no_telegram or dry_run or real_notifier is None) else real_notifier
         )
+        if dry_run:
+            log.info("Dry run: nothing will be downloaded, written or sent.")
 
         state = State.load(app.paths.state_file)
         total_failed = 0
         errors: list[str] = []
         for account in config.accounts:
             try:
-                _, failed = run_account(account, config, state, app.paths.state_file, notifier)
+                _, failed = run_account(
+                    account, config, state, app.paths.state_file, notifier, dry_run=dry_run
+                )
                 total_failed += failed
             except Exception as e:
                 log.exception("[%s] Run failed: %s", account.name, e)
                 errors.append(f"{account.name}: {e}")
 
         # The failure alert always goes through the real bot, even with --no-telegram.
-        if errors or total_failed:
+        if (errors or total_failed) and not dry_run:
             summary = []
             if errors:
                 summary.append(strings.failure_accounts + "\n" + "\n".join(errors))
@@ -146,10 +157,11 @@ def execute_run(app: App, no_telegram: bool = False, archive_dir: Path | None = 
     default=None,
     help="Archive root (overrides archive_dir from the config).",
 )
+@click.option("--dry-run", is_flag=True, help="Only log what would be processed; touch nothing.")
 @click.pass_obj
-def run(app: App, no_telegram: bool, archive_dir: Path | None) -> None:
+def run(app: App, no_telegram: bool, archive_dir: Path | None, dry_run: bool) -> None:
     """Download new entries, archive them and notify."""
-    sys.exit(execute_run(app, no_telegram, archive_dir))
+    sys.exit(execute_run(app, no_telegram, archive_dir, dry_run))
 
 
 @main.command()
@@ -188,6 +200,25 @@ def health(app: App) -> None:
     ok, detail = check_health(DaemonFiles.in_dir(app.paths.data_dir))
     click.echo(detail)
     sys.exit(0 if ok else 1)
+
+
+@main.command()
+@click.pass_obj
+def setup(app: App) -> None:
+    """Interactive first-run setup: discovers your children and rooms, writes the config."""
+    run_wizard(app.config_file, DEFAULT_ARCHIVE_DIR)
+
+
+@main.command()
+@click.option("--send-test", is_flag=True, help="Also send a test message to Telegram.")
+@click.pass_obj
+def check(app: App, send_test: bool) -> None:
+    """Verify the configuration: logins, children IDs, Telegram, exiftool, archive folder."""
+    results = run_checks(app.config, send_test_message=send_test)
+    for r in results:
+        mark = "[green]OK[/green] " if r.ok else "[red]FAIL[/red]"
+        console.print(f"{mark} {r.name}: {r.detail}")
+    sys.exit(0 if all(r.ok for r in results if r.name != "exiftool") else 1)
 
 
 @main.command()
