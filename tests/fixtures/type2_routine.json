@@ -1,0 +1,99 @@
+{
+  "InstanceId": "10000000-0000-0000-0000-000000000001",
+  "InstanceName": "Creche Exemplo",
+  "GroupName": null,
+  "CanUpdateRestricted": false,
+  "CanUpdate": false,
+  "Creator": {
+    "Deleted": false,
+    "Type": "User",
+    "Id": "30000000-0000-0000-0000-000000000001",
+    "AvatarMediaUrl": "https://cdn.example.test/entries/avatar.jpg",
+    "GroupId": null,
+    "Description": "Educadora Exemplo"
+  },
+  "Comments": [],
+  "Reactions": [],
+  "Categories": null,
+  "SharedWith": "Everyone",
+  "ShareSeparately": null,
+  "CommentsEnabled": true,
+  "Type": 2,
+  "Id": "e2000000-0000-0000-0000-000000000001",
+  "CreatedOn": "2026-03-10T08:22:36.807Z",
+  "DisplayDate": "2026-03-10T00:00:00Z",
+  "Date": "2026-03-10T00:00:00Z",
+  "For": [
+    {
+      "Deleted": false,
+      "Type": "Child",
+      "Id": "00000000-0000-0000-0000-000000000001",
+      "AvatarMediaUrl": "https://cdn.example.test/entries/00000000-0000-0000-0000-000000000001.jpg",
+      "GroupId": "20000000-0000-0000-0000-000000000001",
+      "Description": "Maria"
+    }
+  ],
+  "Medias": [],
+  "Times": [
+    {
+      "TimeIn": "2026-03-10T08:22:32.390Z",
+      "TimeInFamilyMember": "Mãe",
+      "TimeInUserId": "x",
+      "TimeOut": "2026-03-10T16:58:33.571Z",
+      "TimeOutFamilyMember": "Pai",
+      "TimeOutUserId": "x"
+    }
+  ],
+  "Meals": [
+    {
+      "Title": "MorningBreak",
+      "Description": "Fruta",
+      "MealStatus": "All",
+      "Drink": "Water",
+      "Notes": null
+    },
+    {
+      "Title": "Lunch",
+      "Description": "Sopa e peixe",
+      "MealStatus": "Most",
+      "Drink": null,
+      "Notes": null
+    },
+    {
+      "Title": "Dinner",
+      "Description": "Iogurte",
+      "MealStatus": "Half",
+      "Drink": "Milk",
+      "Notes": null
+    }
+  ],
+  "SleepTimes": [
+    {
+      "begin": "2026-03-10T12:15:22.322Z",
+      "end": "2026-03-10T14:24:35.724Z",
+      "Checks": null,
+      "BeginUserId": "x",
+      "EndUserId": "x"
+    }
+  ],
+  "ToiletTimes": [
+    {
+      "type": "Xixi"
+    },
+    {
+      "type": "Cocó"
+    }
+  ],
+  "Activities": [
+    {
+      "Description": "Música"
+    },
+    {
+      "Description": "Jogo livre"
+    }
+  ],
+  "Bottles": [],
+  "Occurrences": [],
+  "Confirmed": true,
+  "Version": null
+}

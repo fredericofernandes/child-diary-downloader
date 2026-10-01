@@ -1,0 +1,13 @@
+# gitleaks configuration: default rules plus the project's own allowlist.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fictional placeholders used in examples and tests"
+regexes = [
+  '''123456789:AAExemploDeTokenDoBotFather''',
+  '''00000000-0000-0000-0000-0000000000\d\d''',
+]
+paths = [
+  '''^uv\.lock$''',
+]

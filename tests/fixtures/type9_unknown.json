@@ -1,0 +1,36 @@
+{
+  "InstanceId": "10000000-0000-0000-0000-000000000001",
+  "InstanceName": "Creche Exemplo",
+  "GroupName": null,
+  "CanUpdateRestricted": false,
+  "CanUpdate": false,
+  "Creator": {
+    "Deleted": false,
+    "Type": "User",
+    "Id": "30000000-0000-0000-0000-000000000001",
+    "AvatarMediaUrl": "https://cdn.example.test/entries/avatar.jpg",
+    "GroupId": null,
+    "Description": "Educadora Exemplo"
+  },
+  "Comments": [],
+  "Reactions": [],
+  "Categories": [],
+  "SharedWith": "Everyone",
+  "ShareSeparately": null,
+  "CommentsEnabled": true,
+  "Type": 9,
+  "Id": "e9000000-0000-0000-0000-000000000001",
+  "CreatedOn": "2026-03-13T09:00:00.000Z",
+  "DisplayDate": "2026-03-13T09:00:00.000Z",
+  "For": [
+    {
+      "Deleted": false,
+      "Type": "Child",
+      "Id": "00000000-0000-0000-0000-000000000001",
+      "AvatarMediaUrl": "https://cdn.example.test/entries/00000000-0000-0000-0000-000000000001.jpg",
+      "GroupId": "20000000-0000-0000-0000-000000000001",
+      "Description": "Maria"
+    }
+  ],
+  "Medias": []
+}
