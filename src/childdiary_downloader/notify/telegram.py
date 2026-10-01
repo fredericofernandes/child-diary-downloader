@@ -1,4 +1,4 @@
-"""Envio de mensagens, fotos, vídeos e documentos via Bot API do Telegram."""
+"""Telegram Bot API notifier: messages, photos, videos, documents and albums."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from typing import IO, Any
 
 import requests
 
+from childdiary_downloader.notify.base import MediaItem
+
 log = logging.getLogger(__name__)
 
 MAX_TEXT = 4096
 MAX_CAPTION = 1024
 UPLOAD_TIMEOUT = 300
-
-MediaItem = tuple[IO[bytes], str, str]  # (ficheiro aberto, extensão, legenda)
 
 
 class Telegram:
@@ -32,8 +32,10 @@ class Telegram:
             data["caption"] = caption[:MAX_CAPTION]
         self._post(method, data, files={field: fh})
 
-    def send_document(self, fh: IO[bytes], caption: str = "") -> None:
-        self._send_file("sendDocument", "document", fh, caption)
+    def send_message(self, text: str) -> None:
+        if len(text) > MAX_TEXT:
+            text = text[: MAX_TEXT - 3] + "[…]"
+        self._post("sendMessage", {"chat_id": self.chat_id, "text": text})
 
     def send_photo(self, fh: IO[bytes], caption: str = "") -> None:
         self._send_file("sendPhoto", "photo", fh, caption)
@@ -41,13 +43,11 @@ class Telegram:
     def send_video(self, fh: IO[bytes], caption: str = "") -> None:
         self._send_file("sendVideo", "video", fh, caption)
 
-    def send_message(self, text: str) -> None:
-        if len(text) > MAX_TEXT:
-            text = text[: MAX_TEXT - 3] + "[…]"
-        self._post("sendMessage", {"chat_id": self.chat_id, "text": text})
+    def send_document(self, fh: IO[bytes], caption: str = "") -> None:
+        self._send_file("sendDocument", "document", fh, caption)
 
     def send_media_group(self, items: list[MediaItem]) -> None:
-        """Envia até 10 fotos/vídeos como álbum. A legenda só conta no primeiro."""
+        """Send up to 10 photos/videos as one album. Only the first caption shows."""
         media_json = []
         files: dict[str, IO[bytes]] = {}
         for i, (fh, ext, cap) in enumerate(items):
@@ -58,25 +58,5 @@ class Telegram:
                 item["caption"] = cap[:MAX_CAPTION]
             media_json.append(item)
             files[key] = fh
-        self._post(
-            "sendMediaGroup", {"chat_id": self.chat_id, "media": json.dumps(media_json)}, files
-        )
-
-
-class NullTelegram:
-    """Substituto do Telegram que só regista no log (modo --no-telegram)."""
-
-    def send_document(self, fh: IO[bytes], caption: str = "") -> None:
-        log.info("NullTelegram.send_document caption=%r", (caption or "")[:80])
-
-    def send_photo(self, fh: IO[bytes], caption: str = "") -> None:
-        log.info("NullTelegram.send_photo caption=%r", (caption or "")[:80])
-
-    def send_video(self, fh: IO[bytes], caption: str = "") -> None:
-        log.info("NullTelegram.send_video caption=%r", (caption or "")[:80])
-
-    def send_message(self, text: str) -> None:
-        log.info("NullTelegram.send_message: %s", text[:120])
-
-    def send_media_group(self, items: list[MediaItem]) -> None:
-        log.info("NullTelegram.send_media_group %d items", len(items))
+        data = {"chat_id": self.chat_id, "media": json.dumps(media_json)}
+        self._post("sendMediaGroup", data, files)

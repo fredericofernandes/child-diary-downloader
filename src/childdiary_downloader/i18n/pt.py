@@ -1,0 +1,47 @@
+"""Português (Portugal)."""
+
+from childdiary_downloader.i18n import Strings
+
+STRINGS = Strings(
+    code="pt",
+    daily_routine="Rotina Diária:",
+    schedule="🕐 Horário:",
+    check_in="Entrada",
+    check_out="Saída",
+    meals="🍴 Refeições:",
+    drink="Bebida",
+    meal_titles={
+        "Breakfast": "Pequeno-Almoço",
+        "MorningBreak": "Lanche da Manhã",
+        "Lunch": "Almoço",
+        "Dinner": "Lanche da Tarde",
+    },
+    meal_status={
+        "All": "Comeu tudo",
+        "Most": "Comeu quase tudo",
+        "Half": "Comeu metade",
+        "Some": "Comeu pouco",
+        "None": "Não comeu",
+    },
+    drink_names={"Water": "Água", "Milk": "Leite", "Tea": "Chá"},
+    naps="🌙 Sestas:",
+    hygiene="🚽 Higiene:",
+    activities="🧩 Actividades:",
+    occurrences="⚠️ Ocorrências:",
+    event="📅 Evento",
+    event_start="Início",
+    event_end="Fim",
+    event_requires_answer="⚠️ Este evento requer confirmação de presença",
+    video_call="🎥 Videochamada",
+    unknown_entry_type="[Aviso] Entrada de tipo desconhecido ({type}). Verifica os logs.",
+    failure_header="⚠️ child-diary-downloader:",
+    failure_accounts="Erro ao correr conta(s):",
+    failure_entries="{count} entrada(s) falharam (serão retentadas na próxima execução).",
+    documents_folder="Documentos",
+    document_subfolders={"Ementas": ["ementa"]},
+    group_fallback="Grupo",
+    school_fallback="Escola",
+    caption_date_format="%d/%m/%Y",
+    greeting_pattern=r"^(olá|ola|querid|car[oa]s?\b|bom dia|boa tarde)",
+    unnamed="Sem nome",
+)

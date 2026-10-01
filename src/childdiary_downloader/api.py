@@ -1,77 +1,117 @@
-"""Cliente mínimo da API não oficial de app.childdiary.net (a mesma da web app)."""
+"""Minimal client for the unofficial app.childdiary.net API (the one the web app uses).
+
+Good-neighbour policy: an honest User-Agent, a configurable pause between
+requests, automatic retries with backoff, and respect for Retry-After.
+"""
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from childdiary_downloader import __version__
+
 log = logging.getLogger(__name__)
 
-LOGIN_URL = "https://app.childdiary.net/api/Account/login"
-ENTRIES_URL = "https://app.childdiary.net/api/Entries"
-HEADERS = {"accept": "application/json, text/plain, */*"}
+BASE_URL = "https://app.childdiary.net"
+LOGIN_URL = f"{BASE_URL}/api/Account/login"
+ENTRIES_URL = f"{BASE_URL}/api/Entries"
+PROJECT_URL = "https://github.com/fredericofernandes/child-diary-downloader"
+USER_AGENT = f"child-diary-downloader/{__version__} (+{PROJECT_URL})"
+HEADERS = {"accept": "application/json, text/plain, */*", "user-agent": USER_AGENT}
 MAX_PAGES = 20000
 MAX_RETRIES = 3
-RETRY_BACKOFF = 2  # segundos
+RETRY_BACKOFF = 2  # seconds
 REQUEST_TIMEOUT = 60
-# Pára a paginação após este número de páginas seguidas sem entradas novas.
-# 2 (e não 1) para que uma entrada que falhou anteriormente, logo abaixo de
-# uma página totalmente conhecida, ainda seja apanhada.
+# Stop paginating after this many consecutive pages with no new entries.
+# 2 (not 1) so a previously-failed entry sitting just below a fully-known
+# page still gets picked up.
 KNOWN_PAGES_TO_STOP = 2
+# Page sizes for the two passes (see fetch_entries).
+PAGE_SIZES = (100, 90)
 
 Entry = dict[str, Any]
 
 
+class Throttle:
+    """Sleeps so that consecutive requests are at least ``delay`` seconds apart."""
+
+    def __init__(self, delay: float) -> None:
+        self.delay = delay
+        self._last = 0.0
+
+    def wait(self) -> None:
+        if self.delay <= 0:
+            return
+        now = time.monotonic()
+        remaining = self._last + self.delay - now
+        if remaining > 0:
+            time.sleep(remaining)
+        self._last = time.monotonic()
+
+
+_throttle = Throttle(0.0)
+
+
+def set_request_delay(seconds: float) -> None:
+    """Global pause between requests to childdiary.net (API and media CDN)."""
+    _throttle.delay = seconds
+
+
 def _make_retry_session() -> requests.Session:
-    """Sessão com retries automáticos em erros transitórios."""
+    """Session with automatic retries on transient errors (honours Retry-After)."""
     session = requests.Session()
+    session.headers.update(HEADERS)
     retry = Retry(
         total=MAX_RETRIES,
         backoff_factor=RETRY_BACKOFF,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET", "POST"],
+        respect_retry_after_header=True,
     )
     session.mount("https://", HTTPAdapter(max_retries=retry))
     return session
 
 
-# Sessão partilhada para downloads de media (URLs assinados, sem cookies de auth).
+# Shared session for media downloads (signed URLs, no auth cookies needed).
 _download_session = _make_retry_session()
 
 
 def download_file(url: str) -> bytes:
-    """Descarrega um URL via sessão com retries. Devolve os bytes."""
+    """Download a URL through the retrying session. Returns the raw bytes."""
+    _throttle.wait()
     resp = _download_session.get(url, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.content
 
 
 def login(auth_data: dict[str, Any]) -> requests.Session:
-    """Autentica na API e devolve uma sessão com o cookie de sessão."""
-    # A API exige RememberMe como booleano, não como string.
+    """Authenticate and return a session carrying the auth cookie."""
+    # The API wants RememberMe as a boolean, not a string.
     if isinstance(auth_data.get("RememberMe"), str):
         auth_data = {**auth_data, "RememberMe": auth_data["RememberMe"].lower() == "true"}
     session = _make_retry_session()
+    _throttle.wait()
     resp = session.post(LOGIN_URL, json=auth_data, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return session
 
 
 def fetch_entries(session: requests.Session, known_ids: set[str] | None = None) -> list[Entry]:
-    """Vai buscar as entradas, mais recentes primeiro, sem duplicados por Id.
+    """Fetch entries, newest first, deduplicated by Id.
 
-    A paginação por offset do servidor perde cerca de uma entrada em cada
-    fronteira de página (verificado: page0+page1 de 100 vs. uma página de 200
-    perdem cada uma entrada que a outra devolve). Duas passagens com tamanhos
-    de página diferentes põem as fronteiras em sítios diferentes, e a união
-    recupera as entradas perdidas.
+    The server's offset pagination drops about one entry at each page
+    boundary (verified: page0+page1 of 100 vs. a single page of 200 each miss
+    an entry the other returns). Two passes with different page sizes put the
+    boundaries in different places, so the union recovers the dropped entries.
     """
     merged: dict[str, Entry] = {}
-    for count in (100, 90):
+    for count in PAGE_SIZES:
         for entry in _fetch_pass(session, count, known_ids):
             eid = str(entry.get("Id"))
             if eid not in merged:
@@ -80,16 +120,16 @@ def fetch_entries(session: requests.Session, known_ids: set[str] | None = None) 
 
 
 def _fetch_pass(session: requests.Session, count: int, known_ids: set[str] | None) -> list[Entry]:
-    """Uma passagem de paginação. Pára numa página vazia ou, quando
-    ``known_ids`` é dado, após KNOWN_PAGES_TO_STOP páginas seguidas só com
-    entradas já processadas, para as execuções incrementais serem rápidas.
-    """
+    """One pagination sweep. Stops at an empty page or, when ``known_ids`` is
+    given, after KNOWN_PAGES_TO_STOP consecutive pages of already-processed
+    entries, so incremental runs stay fast."""
     entries: list[Entry] = []
     known_ids = known_ids or set()
     known_streak = 0
     for page in range(MAX_PAGES):
         params: dict[str, str | int] = {"count": count, "page": page, "type": "All"}
-        resp = session.get(ENTRIES_URL, params=params, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        _throttle.wait()
+        resp = session.get(ENTRIES_URL, params=params, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         page_entries = resp.json().get("Entries", [])
         if not page_entries:
@@ -100,10 +140,10 @@ def _fetch_pass(session: requests.Session, count: int, known_ids: set[str] | Non
             if all(e.get("Id") in known_ids for e in page_entries):
                 known_streak += 1
                 if known_streak >= KNOWN_PAGES_TO_STOP:
-                    log.info("A parar a paginação na página %d (tudo já conhecido).", page)
+                    log.info("Stopping pagination at page %d (all entries already known).", page)
                     break
             else:
                 known_streak = 0
     else:
-        log.warning("Atingido MAX_PAGES (%d): podem ter ficado entradas por ler.", MAX_PAGES)
+        log.warning("Reached MAX_PAGES (%d): some entries may have been skipped.", MAX_PAGES)
     return entries

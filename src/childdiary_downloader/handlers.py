@@ -1,8 +1,7 @@
-"""Processamento de cada tipo de entrada: texto para o notificador, ficheiros
-para o arquivo em disco.
+"""Per-entry-type processing: text to the notifier, files to the archive.
 
-Tipos conhecidos da API: 1 = post com fotos/texto, 2 = rotina diária,
-3 = post "revista" com Boxes, 5 = evento/convite.
+Entry types seen in the API: 1 = post with photos/text, 2 = daily routine,
+3 = "magazine" post made of ordered Boxes, 5 = event/invitation.
 """
 
 from __future__ import annotations
@@ -14,61 +13,48 @@ import re
 import shutil
 import subprocess
 from contextlib import ExitStack
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 import requests
 
 from childdiary_downloader.api import download_file
+from childdiary_downloader.config import DocumentsConfig, Routing
+from childdiary_downloader.i18n import Strings
+from childdiary_downloader.notify import MediaItem, Notifier
 
 log = logging.getLogger(__name__)
 
 Entry = dict[str, Any]
 
-MEAL_TITLES = {
-    "MorningBreak": "Lanche da Manhã",
-    "Lunch": "Almoço",
-    "Dinner": "Lanche da Tarde",
-    "Breakfast": "Pequeno-Almoço",
-}
-MEAL_STATUS = {
-    "All": "Comeu tudo",
-    "Most": "Comeu quase tudo",
-    "Half": "Comeu metade",
-    "Some": "Comeu pouco",
-    "None": "Não comeu",
-}
-DRINK_NAMES = {
-    "Water": "Água",
-    "Milk": "Leite",
-    "Tea": "Chá",
-}
-
 PHOTO_EXTS = {".jpg", ".jpeg", ".png"}
 VIDEO_EXTS = {".mp4"}
-
-DOCUMENTS_FOLDER = "Documentos"
-MENUS_FOLDER = "Ementas"
-MENU_KEYWORD = "ementa"
 UNKNOWN_FOLDER = "__unknown__"
 
+# Telegram Bot API upload limits: 10 MB photos, 50 MB videos/documents.
+TG_MAX_PHOTO = 10 * 1024 * 1024
+TG_MAX_FILE = 45 * 1024 * 1024  # margin below the hard 50 MB limit
+ALBUM_SIZE = 10
 
-class Notifier(Protocol):
-    def send_document(self, fh: Any, caption: str = "") -> None: ...
-    def send_photo(self, fh: Any, caption: str = "") -> None: ...
-    def send_video(self, fh: Any, caption: str = "") -> None: ...
-    def send_message(self, text: str) -> None: ...
-    def send_media_group(self, items: list[Any]) -> None: ...
+
+@dataclass(frozen=True)
+class ArchiveContext:
+    """Everything a handler needs besides the entry itself."""
+
+    root: Path
+    strings: Strings
+    documents: DocumentsConfig
 
 
 # ---------------------------------------------------------------------------
-# Texto
+# Text helpers
 # ---------------------------------------------------------------------------
 
 
 def strip_html(text: str) -> str:
-    """Remove tags HTML e descodifica entidades básicas."""
+    """Drop HTML tags and decode the handful of entities the app emits."""
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<p[^>]*>", "", text, flags=re.IGNORECASE)
     text = re.sub(r"</p>", "\n", text, flags=re.IGNORECASE)
@@ -78,12 +64,14 @@ def strip_html(text: str) -> str:
     return text.strip()
 
 
-def summarize_for_filename(text: str) -> str:
-    """Primeira linha com substância de uma mensagem, para dar nome a
-    documentos sem título. Salta saudações ("Querida Família,", "Olá Pais! 💕"),
-    linhas curtas ou que acabam em vírgula/dois pontos.
+def summarize_for_filename(text: str, greeting_pattern: str) -> str:
+    """First substantive line of a message, used to name title-less PDFs.
+
+    Skips greeting lines ("Dear families,", "Olá Pais! 💕"): short lines, or
+    lines ending in a comma/colon, or matching the locale's greeting pattern.
+    Falls back to the first non-empty line.
     """
-    greeting = re.compile(r"^(olá|ola|querid|car[oa]s?\b|bom dia|boa tarde)", re.IGNORECASE)
+    greeting = re.compile(greeting_pattern, re.IGNORECASE)
     lines = [line.strip() for line in text.splitlines()]
     for line in lines:
         if len(line) >= 15 and not line.endswith((",", ":")) and not greeting.match(line):
@@ -95,8 +83,8 @@ def summarize_for_filename(text: str) -> str:
 
 
 def parse_dt(s: str) -> datetime:
-    """ISO 8601 com ou sem fracções de segundo. Os timestamps da API trazem
-    um "Z" mas são hora local de Portugal, por isso ficam naive."""
+    """ISO 8601 with or without fractional seconds. API timestamps carry a
+    "Z" but are actually the school's local time, so they stay naive."""
     for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
         try:
             return datetime.strptime(s, fmt)
@@ -106,14 +94,14 @@ def parse_dt(s: str) -> datetime:
 
 
 # ---------------------------------------------------------------------------
-# Destinatários e routing
+# Recipients and routing
 # ---------------------------------------------------------------------------
 
 
-def _route_to_children(targets: list[str], entry: Entry, routing: dict[str, Any]) -> list[str]:
-    """Remove crianças que ainda não tinham entrado na data da entrada (child_since)."""
+def _route_to_children(targets: list[str], entry: Entry, routing: Routing) -> list[str]:
+    """Drop children who were not enrolled yet on the entry's date (child_since)."""
     date = (entry.get("CreatedOn") or "")[:10]
-    since = routing.get("child_since", {})
+    since = routing.child_since
     kept = [c for c in targets if not since.get(c) or date >= since[c]]
     return kept or targets
 
@@ -122,19 +110,20 @@ def get_entry_info(
     entry: Entry,
     children: dict[str, str],
     group_to_child: dict[str, str] | None = None,
-    routing: dict[str, Any] | None = None,
+    routing: Routing | None = None,
+    strings: Strings | None = None,
 ) -> tuple[list[str], str, list[str]]:
-    """Devolve (nomes_das_nossas_crianças, prefixo_da_mensagem, pastas_de_arquivo).
+    """Return (our_children_names, message_prefix, archive_folders).
 
-    Posts de sala/escola são encaminhados para as pastas das crianças: primeiro
-    pelo mapa ``routing`` explícito (ganha, é estável), depois pelo mapa
-    grupo->criança descoberto nas próprias entradas. Grupos sem mapeamento
-    caem numa pasta com o nome do grupo, com aviso para classificar.
+    Group/school posts are routed into the children's own folders: first via
+    the explicit ``routing`` map (wins, it is stable across runs), then via
+    the group->child map discovered from the children's own entries. Unmapped
+    groups fall back to a folder named after the group, with a warning.
     """
-    if group_to_child is None:
-        group_to_child = {}
-    if routing is None:
-        routing = {}
+    group_to_child = group_to_child or {}
+    routing = routing or Routing()
+    group_fallback = strings.group_fallback if strings else "Group"
+    school_fallback = strings.school_fallback if strings else "School"
 
     names = [
         children[str(item.get("Id"))]
@@ -144,32 +133,29 @@ def get_entry_info(
     if names:
         unique = list(dict.fromkeys(names))
         prefix = "[" + " & ".join(unique) + "] "
-        return names, prefix, unique  # cada criança tem a sua pasta
+        return names, prefix, unique  # one folder per child
 
     for item in entry.get("For", []):
         if item.get("Type") == "Group":
             gid = item.get("Id")
-            desc = item.get("Description", "Grupo")
-            targets = routing.get("groups", {}).get(desc)
+            desc = item.get("Description", group_fallback)
+            targets = routing.groups.get(desc)
             if targets:
                 return [], f"[{desc}] ", _route_to_children(targets, entry, routing)
             child_name = group_to_child.get(str(gid)) if gid else None
             if child_name:
                 return [], f"[{desc}] ", [child_name]
             log.warning(
-                "Grupo não mapeado %r: a arquivar em pasta própria; "
-                "adiciona-o a routing.groups no config.yaml.",
-                desc,
+                "Unmapped group %r: archiving in its own folder; add it to routing.groups.", desc
             )
             return [], f"[{desc}] ", [desc]
         if item.get("Type") == "Instance":
-            instance_name = entry.get("InstanceName", "Escola")
-            targets = routing.get("instances", {}).get(instance_name)
+            instance_name = entry.get("InstanceName", school_fallback)
+            targets = routing.instances.get(instance_name)
             if targets:
                 return [], f"[{instance_name}] ", _route_to_children(targets, entry, routing)
             log.warning(
-                "Escola não mapeada %r: a arquivar em pasta própria; "
-                "adiciona-a a routing.instances no config.yaml.",
+                "Unmapped school %r: archiving in its own folder; add it to routing.instances.",
                 instance_name,
             )
             return [], f"[{instance_name}] ", [instance_name]
@@ -177,141 +163,135 @@ def get_entry_info(
     return [], "", [UNKNOWN_FOLDER]
 
 
-def _entry_date_str(entry: Entry) -> str:
-    raw = str(entry.get("DisplayDate") or entry.get("CreatedOn") or "")
+def _raw_date(entry: Entry) -> str:
+    return str(entry.get("DisplayDate") or entry.get("CreatedOn") or "")
+
+
+def _caption_date(entry: Entry, strings: Strings) -> str:
     try:
-        return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
-    except (ValueError, TypeError):
+        return datetime.strptime(_raw_date(entry)[:10], "%Y-%m-%d").strftime(
+            strings.caption_date_format
+        )
+    except ValueError:
         return ""
 
 
 def _archive_date(entry: Entry) -> str:
-    """AAAA-MM-DD para a pasta de arquivo."""
-    raw = str(entry.get("DisplayDate") or entry.get("CreatedOn") or "")
+    """YYYY-MM-DD for the archive folder."""
     try:
-        return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
-    except (ValueError, TypeError):
+        return datetime.strptime(_raw_date(entry)[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
         return "unknown-date"
 
 
 # ---------------------------------------------------------------------------
-# Handlers por tipo
+# Handlers per entry type
 # ---------------------------------------------------------------------------
 
 
 def process_type1(
-    archive_root: Path,
+    ctx: ArchiveContext,
     entry: Entry,
-    tg: Notifier,
+    notifier: Notifier,
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
 ) -> None:
-    """Post de fotos/texto."""
+    """Photo/text post."""
     title = entry.get("Title") or ""
     body = strip_html(entry.get("Text", "") or "")
     text = "\n\n".join(filter(None, [title, body]))
     if text:
-        tg.send_message(prefix + text)
+        notifier.send_message(prefix + text)
 
-    date_str = _entry_date_str(entry)
+    date_str = _caption_date(entry, ctx.strings)
     caption = f"{date_str} — {text[:200]}" if text else date_str
     process_medias(
-        archive_root,
+        ctx,
         entry,
         entry.get("Medias", []),
-        tg,
+        notifier,
         folders,
         caption,
         doc_folders=doc_folders,
-        doc_title=title or summarize_for_filename(body),
+        doc_title=title or summarize_for_filename(body, ctx.strings.greeting_pattern),
     )
 
 
 def process_type2(
-    archive_root: Path,
+    ctx: ArchiveContext,
     entry: Entry,
-    tg: Notifier,
+    notifier: Notifier,
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
 ) -> None:
-    """Rotina diária."""
-    parts = [prefix + "Rotina Diária:"]
+    """Daily routine."""
+    s = ctx.strings
+    parts = [prefix + s.daily_routine]
 
     if entry.get("Times"):
-        times_lines = ["", "🕐 Horário:"]
+        lines = ["", s.schedule]
         for t in entry["Times"]:
-            if t.get("TimeIn"):
-                who = t.get("TimeInFamilyMember", "")
-                line = f"  Entrada: {parse_dt(t['TimeIn']).strftime('%H:%M')}"
-                if who:
-                    line += f" ({who})"
-                times_lines.append(line)
-            if t.get("TimeOut"):
-                who = t.get("TimeOutFamilyMember", "")
-                line = f"  Saída: {parse_dt(t['TimeOut']).strftime('%H:%M')}"
-                if who:
-                    line += f" ({who})"
-                times_lines.append(line)
-        parts.append("\n".join(times_lines))
+            for key, label in (("TimeIn", s.check_in), ("TimeOut", s.check_out)):
+                if t.get(key):
+                    who = t.get(f"{key}FamilyMember", "")
+                    line = f"  {label}: {parse_dt(t[key]).strftime('%H:%M')}"
+                    if who:
+                        line += f" ({who})"
+                    lines.append(line)
+        parts.append("\n".join(lines))
 
     if entry.get("Meals"):
-        meal_lines = ["", "🍴 Refeições:"]
+        lines = ["", s.meals]
         for m in entry["Meals"]:
-            title_pt = MEAL_TITLES.get(m.get("Title", ""), m.get("Title", ""))
-            status_pt = MEAL_STATUS.get(m.get("MealStatus", ""), m.get("MealStatus", ""))
-            drink_pt = DRINK_NAMES.get(m.get("Drink", ""), m.get("Drink", ""))
-            desc = m.get("Description", "")
-            line = f"  {title_pt}: {desc}"
-            if status_pt:
-                line += f" — {status_pt}"
-            if drink_pt:
-                line += f"\n  Bebida: {drink_pt}"
-            meal_lines.append(line)
-        parts.append("\n".join(meal_lines))
+            title = s.meal_titles.get(m.get("Title", ""), m.get("Title", ""))
+            status = s.meal_status.get(m.get("MealStatus", ""), m.get("MealStatus", ""))
+            drink = s.drink_names.get(m.get("Drink", ""), m.get("Drink", ""))
+            line = f"  {title}: {m.get('Description', '')}"
+            if status:
+                line += f" — {status}"
+            if drink:
+                line += f"\n  {s.drink}: {drink}"
+            lines.append(line)
+        parts.append("\n".join(lines))
 
     if entry.get("SleepTimes"):
-        sleep_lines = ["", "🌙 Sestas:"]
-        for s in entry["SleepTimes"]:
-            begin = parse_dt(s["begin"]).strftime("%H:%M") if s.get("begin") else "?"
-            end = parse_dt(s["end"]).strftime("%H:%M") if s.get("end") else "?"
-            sleep_lines.append(f"  {begin} — {end}")
-        parts.append("\n".join(sleep_lines))
+        lines = ["", s.naps]
+        for nap in entry["SleepTimes"]:
+            begin = parse_dt(nap["begin"]).strftime("%H:%M") if nap.get("begin") else "?"
+            end = parse_dt(nap["end"]).strftime("%H:%M") if nap.get("end") else "?"
+            lines.append(f"  {begin} — {end}")
+        parts.append("\n".join(lines))
 
     if entry.get("ToiletTimes"):
-        toilet_lines = ["", "🚽 Higiene:"]
-        for t in entry["ToiletTimes"]:
-            toilet_lines.append("  " + t.get("type", ""))
-        parts.append("\n".join(toilet_lines))
+        parts.append(
+            "\n".join(["", s.hygiene] + ["  " + t.get("type", "") for t in entry["ToiletTimes"]])
+        )
 
     if entry.get("Activities"):
-        act_lines = ["", "🧩 Actividades:"]
-        for a in entry["Activities"]:
-            act_lines.append("  " + a.get("Description", ""))
-        parts.append("\n".join(act_lines))
+        parts.append(
+            "\n".join(
+                ["", s.activities] + ["  " + a.get("Description", "") for a in entry["Activities"]]
+            )
+        )
 
     if entry.get("Occurrences"):
-        occ_lines = ["", "⚠️ Ocorrências:"]
-        for o in entry["Occurrences"]:
-            occ_lines.append("  " + str(o))
-        parts.append("\n".join(occ_lines))
+        parts.append("\n".join(["", s.occurrences] + ["  " + str(o) for o in entry["Occurrences"]]))
 
-    tg.send_message("\n".join(parts))
-    process_medias(
-        archive_root, entry, entry.get("Medias", []), tg, folders, doc_folders=doc_folders
-    )
+    notifier.send_message("\n".join(parts))
+    process_medias(ctx, entry, entry.get("Medias", []), notifier, folders, doc_folders=doc_folders)
 
 
 def process_type3(
-    archive_root: Path,
+    ctx: ArchiveContext,
     entry: Entry,
-    tg: Notifier,
+    notifier: Notifier,
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
 ) -> None:
-    """Post "revista" com Boxes ordenadas."""
+    """ "Magazine" post made of ordered Boxes."""
     boxes = sorted(entry.get("Boxes", []), key=lambda b: b.get("Order", 0))
 
     parts = [
@@ -321,9 +301,9 @@ def process_type3(
     ]
     message = "\n\n".join(filter(None, parts))
     if message:
-        tg.send_message(prefix + message)
+        notifier.send_message(prefix + message)
 
-    # Lista de medias pela ordem de apresentação das Boxes.
+    # Media list in display order (Boxes), falling back to the flat list.
     media_lookup = {m["Id"]: m for m in entry.get("Medias", [])}
     seen_ids: set[str] = set()
     ordered_medias = []
@@ -336,7 +316,7 @@ def process_type3(
     if not ordered_medias:
         ordered_medias = entry.get("Medias", [])
 
-    date_str = _entry_date_str(entry)
+    date_str = _caption_date(entry, ctx.strings)
     title = next(
         (
             strip_html(b.get("Text") or "")
@@ -347,95 +327,92 @@ def process_type3(
     )
     caption = f"{date_str} — {title}" if title else date_str
     process_medias(
-        archive_root,
+        ctx,
         entry,
         ordered_medias,
-        tg,
+        notifier,
         folders,
         caption,
         doc_folders=doc_folders,
-        doc_title=title or summarize_for_filename(message),
+        doc_title=title or summarize_for_filename(message, ctx.strings.greeting_pattern),
     )
 
 
 def process_type5(
-    archive_root: Path,
+    ctx: ArchiveContext,
     entry: Entry,
-    tg: Notifier,
+    notifier: Notifier,
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
 ) -> None:
-    """Evento / convite."""
+    """Event / invitation."""
+    s = ctx.strings
     title = entry.get("Title") or ""
     description = entry.get("Description") or ""
     start = entry.get("StartDateTime") or ""
     end = entry.get("EndDateTime") or ""
+    date_fmt = f"{s.caption_date_format} %H:%M"
 
-    lines = ["📅 Evento: " + title] if title else ["📅 Evento"]
+    lines = [f"{s.event}: {title}" if title else s.event]
     if description:
         lines.append(description)
     if start:
-        lines.append("Início: " + parse_dt(start).strftime("%d/%m/%Y %H:%M"))
+        lines.append(f"{s.event_start}: {parse_dt(start).strftime(date_fmt)}")
     if end:
-        lines.append("Fim: " + parse_dt(end).strftime("%d/%m/%Y %H:%M"))
+        lines.append(f"{s.event_end}: {parse_dt(end).strftime(date_fmt)}")
     if entry.get("RequiresAnswer"):
-        lines.append("⚠️ Este evento requer confirmação de presença")
+        lines.append(s.event_requires_answer)
     if entry.get("VideoCallId"):
-        lines.append(f"🎥 Videochamada: {entry['VideoCallId']}")
+        lines.append(f"{s.video_call}: {entry['VideoCallId']}")
 
-    tg.send_message(prefix + "\n".join(lines))
+    notifier.send_message(prefix + "\n".join(lines))
 
-    date_str = _entry_date_str(entry)
+    date_str = _caption_date(entry, s)
     caption = f"{date_str} — {title}" if title else date_str
     process_medias(
-        archive_root,
+        ctx,
         entry,
         entry.get("Medias", []),
-        tg,
+        notifier,
         folders,
         caption,
         doc_folders=doc_folders,
-        doc_title=title or summarize_for_filename(description),
+        doc_title=title or summarize_for_filename(description, s.greeting_pattern),
     )
 
 
 def process_unknown(
-    archive_root: Path,
+    ctx: ArchiveContext,
     entry: Entry,
-    tg: Notifier,
+    notifier: Notifier,
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
 ) -> None:
     entry_type = entry.get("Type", "?")
     log.warning(
-        "Tipo de entrada desconhecido %s: %s",
-        entry_type,
-        json.dumps(entry, indent=2, ensure_ascii=False),
+        "Unknown entry type %s: %s", entry_type, json.dumps(entry, indent=2, ensure_ascii=False)
     )
-    tg.send_message(
-        prefix + f"[Aviso] Entrada de tipo desconhecido ({entry_type}). Verifica os logs."
-    )
+    notifier.send_message(prefix + ctx.strings.unknown_entry_type.format(type=entry_type))
 
 
 HANDLERS = {1: process_type1, 2: process_type2, 3: process_type3, 5: process_type5}
 
 
 # ---------------------------------------------------------------------------
-# Medias
+# Media
 # ---------------------------------------------------------------------------
 
 
 def _entry_datetime(entry: Entry) -> datetime:
-    """Timestamp para nomes de ficheiro/EXIF: dia do DisplayDate + hora do CreatedOn."""
+    """Timestamp for file names/EXIF: DisplayDate's day with CreatedOn's time."""
     try:
         created = parse_dt(entry.get("CreatedOn", ""))
     except ValueError:
         created = datetime(2000, 1, 1)
-    date_part = _archive_date(entry)
     try:
-        day = datetime.strptime(date_part, "%Y-%m-%d")
+        day = datetime.strptime(_archive_date(entry), "%Y-%m-%d")
         return created.replace(year=day.year, month=day.month, day=day.day)
     except ValueError:
         return created
@@ -448,16 +425,26 @@ def _same_file(a: str, b: str) -> bool:
         return False
 
 
+def document_subfolder(title: str, documents: DocumentsConfig) -> str | None:
+    """Subfolder of the documents folder whose keywords match the title, if any."""
+    lowered = title.lower()
+    for folder, keywords in documents.subfolders.items():
+        if any(kw in lowered for kw in keywords):
+            return folder
+    return None
+
+
 def _save_document_copy(
-    archive_root: Path, pdf_path: str, doc_folders: list[str], date_str: str, title: str
+    ctx: ArchiveContext, pdf_path: str, doc_folders: list[str], date_str: str, title: str
 ) -> None:
-    """Copia um PDF dirigido à criança para <Criança>/Documentos/ com nome legível."""
+    """Copy a child-addressed PDF into <Child>/<Documents>/ with a readable name."""
     title = re.sub(r"[/\\:]", "-", strip_html(title)).strip()[:80]
     base = f"{date_str} — {title}" if title else date_str
+    subfolder = document_subfolder(base, ctx.documents)
     for child in doc_folders:
-        docs_dir = os.path.join(archive_root, child, DOCUMENTS_FOLDER)
-        if MENU_KEYWORD in base.lower():
-            docs_dir = os.path.join(docs_dir, MENUS_FOLDER)
+        docs_dir = os.path.join(ctx.root, child, ctx.documents.folder)
+        if subfolder:
+            docs_dir = os.path.join(docs_dir, subfolder)
         os.makedirs(docs_dir, exist_ok=True)
         dest = os.path.join(docs_dir, base + ".pdf")
         n = 2
@@ -466,12 +453,7 @@ def _save_document_copy(
             n += 1
         if not os.path.exists(dest):
             shutil.copy2(pdf_path, dest)
-            log.info("Documento guardado: %s", dest)
-
-
-# Limites da Bot API do Telegram: 10 MB fotos, 50 MB vídeos/documentos.
-TG_MAX_PHOTO = 10 * 1024 * 1024
-TG_MAX_FILE = 45 * 1024 * 1024  # margem abaixo do limite duro de 50 MB
+            log.info("Document saved: %s", dest)
 
 
 def _too_big_for_telegram(path: str, ext: str) -> bool:
@@ -483,12 +465,12 @@ def _too_big_for_telegram(path: str, ext: str) -> bool:
 
 
 def _embed_metadata(paths: list[str], dt: datetime, description: str) -> None:
-    """Escreve datas EXIF (e descrição, em fotos) via exiftool. Best-effort:
-    sem exiftool instalado fica só o mtime."""
+    """Write EXIF dates (and the description, for photos) with exiftool.
+    Best effort: without exiftool only the file mtime carries the date."""
     if not paths:
         return
     if shutil.which("exiftool") is None:
-        log.warning("exiftool não encontrado: ficheiros guardados sem metadados EXIF.")
+        log.warning("exiftool not found: files saved without EXIF metadata.")
         return
     stamp = dt.strftime("%Y:%m:%d %H:%M:%S")
     args = ["exiftool", "-overwrite_original", "-q", f"-AllDates={stamp}"]
@@ -496,36 +478,38 @@ def _embed_metadata(paths: list[str], dt: datetime, description: str) -> None:
         args.append(f"-ImageDescription={description[:500]}")
     result = subprocess.run(args + paths, capture_output=True, text=True)
     if result.returncode != 0:
-        log.warning("exiftool falhou em %d ficheiro(s): %s", len(paths), result.stderr.strip())
+        log.warning("exiftool failed for %d file(s): %s", len(paths), result.stderr.strip())
 
 
 def process_medias(
-    archive_root: Path,
+    ctx: ArchiveContext,
     entry: Entry,
     medias: list[dict[str, Any]],
-    tg: Notifier,
+    notifier: Notifier,
     folders: list[str],
     caption: str = "",
     doc_folders: list[str] | None = None,
     doc_title: str = "",
 ) -> None:
-    """Descarrega, arquiva em disco e envia as medias para o notificador.
+    """Download, archive on disk and hand the media to the notifier.
 
-    Ficheiros chamam-se <data>_<hora>_<NN><ext> (NN = posição no post) e vão
-    para <pasta>/<ano>/<data>/. Datas EXIF, descrição e mtime ficam com a data
-    da entrada para as apps de fotos ordenarem bem. Cada ficheiro é guardado
-    em todas as pastas de ``folders`` (um download, depois cópias).
-    Fotos e vídeos vão em álbuns de até 10. PDFs e outros vão como documento.
+    Files are named <date>_<time>_<NN><ext> (NN = position in the post) and
+    saved under <folder>/<year>/<date>/. EXIF dates, description and mtime
+    are set to the entry date so photo apps sort the archive correctly. Each
+    file is saved to every folder in ``folders`` (one download, then copies).
+    Photos and videos go out in albums of up to ALBUM_SIZE; PDFs and unknown
+    formats as documents.
 
-    PDFs de entradas dirigidas só às nossas crianças (``doc_folders``) ganham
-    também uma cópia com nome legível em <Criança>/Documentos/.
+    PDFs from entries addressed exclusively to our children (``doc_folders``)
+    also get a readable-named copy in <Child>/<Documents>/, where development
+    reports, adapted menus and the like are easy to find later.
     """
     photos_videos: list[tuple[str, str]] = []  # (primary_path, ext)
 
     entry_dt = _entry_datetime(entry)
     date_str = _archive_date(entry)
     year = date_str[:4]
-    primary_dir = os.path.join(archive_root, folders[0], year, date_str)
+    primary_dir = os.path.join(ctx.root, folders[0], year, date_str)
 
     new_photos: list[str] = []
     new_videos: list[str] = []
@@ -542,32 +526,32 @@ def process_medias(
                 content = download_file(media["Url"])
             except requests.HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
-                    # Ficheiro apagado no CDN da escola: não falha a entrada toda.
-                    log.warning("Media desaparecida do servidor (404): %s%s", media["Id"], ext)
+                    # Blob deleted on the school's CDN: gone for good, keep the entry.
+                    log.warning("Media gone from server (404), skipping: %s%s", media["Id"], ext)
                     continue
                 raise
             with open(primary_path, "wb") as out:
                 out.write(content)
-            log.info("Guardado %s", primary_path)
+            log.info("Saved %s", primary_path)
             if ext.lower() in PHOTO_EXTS:
                 new_photos.append(primary_path)
             elif ext.lower() in VIDEO_EXTS:
                 new_videos.append(primary_path)
         else:
-            log.debug("Já existe: %s", primary_path)
+            log.debug("Already exists: %s", primary_path)
 
         all_paths.append(primary_path)
 
         if ext.lower() == ".pdf" and doc_folders and os.path.exists(primary_path):
-            _save_document_copy(archive_root, primary_path, doc_folders, date_str, doc_title)
+            _save_document_copy(ctx, primary_path, doc_folders, date_str, doc_title)
 
         if ext in PHOTO_EXTS or ext in VIDEO_EXTS:
             if _too_big_for_telegram(primary_path, ext):
-                log.warning("Demasiado grande para o Telegram, só arquivado: %s", primary_path)
+                log.warning("Too big for Telegram, archived only: %s", primary_path)
             else:
                 photos_videos.append((primary_path, ext))
 
-    # EXIF nos ficheiros novos, depois mtime e cópias para as outras pastas.
+    # EXIF on freshly downloaded files, then mtimes and copies to the other folders.
     _embed_metadata(new_photos, entry_dt, caption)
     _embed_metadata(new_videos, entry_dt, "")
     mtime = entry_dt.timestamp()
@@ -575,40 +559,40 @@ def process_medias(
         os.utime(primary_path, (mtime, mtime))
         file_name = os.path.basename(primary_path)
         for extra_folder in folders[1:]:
-            extra_dir = os.path.join(archive_root, extra_folder, year, date_str)
+            extra_dir = os.path.join(ctx.root, extra_folder, year, date_str)
             os.makedirs(extra_dir, exist_ok=True)
             extra_path = os.path.join(extra_dir, file_name)
             if not os.path.exists(extra_path):
                 shutil.copy2(primary_path, extra_path)
-                log.info("Copiado para %s", extra_path)
+                log.info("Copied to %s", extra_path)
 
-    # Ficheiros que não são foto/vídeo (PDFs etc.) vão como documento.
+    # Non photo/video files (PDFs etc.) go as documents.
     for primary_path in all_paths:
         ext = os.path.splitext(primary_path)[1]
         if ext not in PHOTO_EXTS and ext not in VIDEO_EXTS:
             if _too_big_for_telegram(primary_path, ext):
-                log.warning("Demasiado grande para o Telegram, só arquivado: %s", primary_path)
+                log.warning("Too big for Telegram, archived only: %s", primary_path)
                 continue
             with open(primary_path, "rb") as doc:
-                tg.send_document(doc)
+                notifier.send_document(doc)
 
-    # Fotos/vídeos em álbuns de até 10.
-    for i in range(0, len(photos_videos), 10):
-        batch = photos_videos[i : i + 10]
+    # Photos/videos in albums.
+    for i in range(0, len(photos_videos), ALBUM_SIZE):
+        batch = photos_videos[i : i + ALBUM_SIZE]
         batch_caption = caption if i == 0 else ""
 
         if len(batch) == 1:
             dest_path, ext = batch[0]
             with open(dest_path, "rb") as single:
                 if ext in PHOTO_EXTS:
-                    tg.send_photo(single, caption=batch_caption)
+                    notifier.send_photo(single, caption=batch_caption)
                 else:
-                    tg.send_video(single, caption=batch_caption)
+                    notifier.send_video(single, caption=batch_caption)
         else:
             with ExitStack() as stack:
                 handles = [stack.enter_context(open(p, "rb")) for p, _ in batch]
-                items = [
+                items: list[MediaItem] = [
                     (handle, ext, batch_caption if idx == 0 else "")
                     for idx, ((_, ext), handle) in enumerate(zip(batch, handles, strict=True))
                 ]
-                tg.send_media_group(items)
+                notifier.send_media_group(items)

@@ -1,0 +1,47 @@
+"""English (Ireland / international)."""
+
+from childdiary_downloader.i18n import Strings
+
+STRINGS = Strings(
+    code="en",
+    daily_routine="Daily routine:",
+    schedule="🕐 Times:",
+    check_in="Arrived",
+    check_out="Left",
+    meals="🍴 Meals:",
+    drink="Drink",
+    meal_titles={
+        "Breakfast": "Breakfast",
+        "MorningBreak": "Morning snack",
+        "Lunch": "Lunch",
+        "Dinner": "Afternoon snack",
+    },
+    meal_status={
+        "All": "Ate everything",
+        "Most": "Ate most of it",
+        "Half": "Ate half",
+        "Some": "Ate a little",
+        "None": "Did not eat",
+    },
+    drink_names={"Water": "Water", "Milk": "Milk", "Tea": "Tea"},
+    naps="🌙 Naps:",
+    hygiene="🚽 Nappy / toilet:",
+    activities="🧩 Activities:",
+    occurrences="⚠️ Incidents:",
+    event="📅 Event",
+    event_start="Starts",
+    event_end="Ends",
+    event_requires_answer="⚠️ This event requires an RSVP",
+    video_call="🎥 Video call",
+    unknown_entry_type="[Warning] Unknown entry type ({type}). Check the logs.",
+    failure_header="⚠️ child-diary-downloader:",
+    failure_accounts="Error while running account(s):",
+    failure_entries="{count} entries failed (they will be retried on the next run).",
+    documents_folder="Documents",
+    document_subfolders={"Menus": ["menu"]},
+    group_fallback="Group",
+    school_fallback="School",
+    caption_date_format="%d/%m/%Y",
+    greeting_pattern=r"^(hi\b|hello|hey\b|dear\b|good (morning|afternoon|evening))",
+    unnamed="Unnamed",
+)

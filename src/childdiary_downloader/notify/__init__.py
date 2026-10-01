@@ -1,5 +1,6 @@
-"""Notificadores. Na Fase 1 existe apenas o Telegram e o NullNotifier."""
+"""Notifiers: Telegram today; the protocol leaves room for email, ntfy, Discord."""
 
-from childdiary_downloader.notify.telegram import NullTelegram, Telegram
+from childdiary_downloader.notify.base import MediaItem, Notifier, NullNotifier
+from childdiary_downloader.notify.telegram import Telegram
 
-__all__ = ["NullTelegram", "Telegram"]
+__all__ = ["MediaItem", "Notifier", "NullNotifier", "Telegram"]

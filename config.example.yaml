@@ -8,6 +8,12 @@
 # Pasta raiz do arquivo: <archive_dir>/<Criança>/<Ano>/<Data>/...
 archive_dir: ~/Pictures/Child-Diary
 
+# Língua das notificações e dos nomes de pastas por defeito: pt ou en.
+language: pt
+
+# Fuso horário da escola (nome IANA). Europe/Lisbon ou Europe/Dublin.
+timezone: Europe/Lisbon
+
 telegram:
   token: ${CDD_TELEGRAM_TOKEN}
   chat_id: ${CDD_TELEGRAM_CHAT_ID}
@@ -37,3 +43,17 @@ routing:
   # Ignora posts de escola anteriores à entrada de cada criança (AAAA-MM-DD).
   child_since:
     Tomás: "2025-09-01"
+
+# Opcional. PDFs dirigidos só às tuas crianças (relatórios, ementas adaptadas,
+# circulares pessoais) ganham uma cópia com nome legível em
+# <Criança>/<folder>/AAAA-MM-DD — Título.pdf. Cada subpasta recebe os PDFs
+# cujo título contém uma das palavras-chave. Por defeito segue a língua:
+# pt -> Documentos/Ementas (ementa); en -> Documents/Menus (menu).
+documents:
+  folder: Documentos
+  subfolders:
+    Ementas: [ementa]
+
+# Opcional. Pausa mínima entre pedidos ao childdiary.net, em segundos.
+network:
+  request_delay_seconds: 0.5

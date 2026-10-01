@@ -36,6 +36,11 @@ Comandos: `childdiary run [--no-telegram]`, `childdiary list-groups`,
 `childdiary discover`. Segredos vivem em variáveis de ambiente ou num `.env`,
 nunca no `config.yaml` nem no repositório.
 
+Notificações e nomes de pastas em português por defeito (`language: pt`) ou em
+inglês (`language: en`); fuso horário da escola configurável (`timezone`).
+Os pedidos ao childdiary.net identificam-se com um User-Agent honesto e
+respeitam uma pausa mínima entre si.
+
 ## Aviso
 
 Projecto independente, sem qualquer ligação à ChildDiary. Usa-o apenas na tua
