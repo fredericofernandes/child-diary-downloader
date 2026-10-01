@@ -6,6 +6,7 @@
 # ficheiro .env ao lado deste. Guarda aí as passwords e o token.
 
 # Pasta raiz do arquivo: <archive_dir>/<Criança>/<Ano>/<Data>/...
+# (em Docker é ignorado: a variável CDD_ARCHIVE_DIR aponta para o volume /archive)
 archive_dir: ~/Pictures/Child-Diary
 
 # Língua das notificações e dos nomes de pastas por defeito: pt ou en.

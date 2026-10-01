@@ -24,6 +24,12 @@ dos teus filhos merecem uma cópia que seja tua. Os termos de serviço do
 ChildDiary reconhecem que os dados das crianças pertencem aos encarregados de
 educação (RGPD) e não proíbem o acesso automatizado à própria conta.
 
+## Instalação
+
+- **Docker** (recomendado, qualquer máquina ou NAS): [docs/install-docker.md](docs/install-docker.md)
+  e [docs/install-nas.md](docs/install-nas.md). `docker compose up -d` e fica a correr todos os dias.
+- **Python** com launchd, systemd ou cron: [docs/install-python.md](docs/install-python.md).
+
 ## Estado actual
 
 ```sh

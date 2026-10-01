@@ -29,6 +29,7 @@ dependencies = [
   "pyyaml>=6.0",
   "platformdirs>=4.0",
   "python-dotenv>=1.0",
+  "croniter>=6.2.4",
 ]
 
 [project.scripts]
@@ -56,6 +57,7 @@ dev = [
   "types-requests",
   "types-PyYAML",
   "pre-commit>=4.6.2",
+  "types-croniter>=6.2.4.20260711",
 ]
 
 [tool.ruff]

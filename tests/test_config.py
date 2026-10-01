@@ -103,3 +103,10 @@ def test_validation_errors(overrides: dict[str, object], message: str) -> None:
 def test_top_level_must_be_mapping() -> None:
     with pytest.raises(ConfigError):
         parse_config(["not", "a", "mapping"])
+
+
+def test_archive_dir_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("CDD_ARCHIVE_DIR", str(tmp_path / "vol"))
+    assert make_config(archive_dir="/from/file").archive_dir == tmp_path / "vol"
+    monkeypatch.delenv("CDD_ARCHIVE_DIR")
+    assert make_config(archive_dir="/from/file").archive_dir == Path("/from/file")

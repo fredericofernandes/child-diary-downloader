@@ -226,7 +226,11 @@ def parse_config(data: Any, source: Path | None = None) -> Config:
     except (ZoneInfoNotFoundError, ValueError) as e:
         raise ConfigError(f"timezone {timezone!r} is not a valid IANA zone name.") from e
 
-    archive_dir = Path(str(data.get("archive_dir") or DEFAULT_ARCHIVE_DIR)).expanduser()
+    # Environment wins over the file so the Docker image can mount /archive
+    # without the user editing config.yaml.
+    archive_dir = Path(
+        os.environ.get("CDD_ARCHIVE_DIR") or str(data.get("archive_dir") or DEFAULT_ARCHIVE_DIR)
+    ).expanduser()
     return Config(
         archive_dir=archive_dir,
         language=language,

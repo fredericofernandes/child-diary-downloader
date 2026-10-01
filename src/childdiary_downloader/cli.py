@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import logging
+import os
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -19,6 +20,13 @@ from childdiary_downloader.logging_setup import setup_logging
 from childdiary_downloader.notify import Notifier, NullNotifier, Telegram
 from childdiary_downloader.paths import RuntimePaths, default_config_file, default_data_dir
 from childdiary_downloader.runner import list_groups, run_account, run_discover
+from childdiary_downloader.scheduler import (
+    DEFAULT_SCHEDULE,
+    DaemonFiles,
+    check_health,
+    run_daemon,
+    validate_schedule,
+)
 from childdiary_downloader.state import State
 
 log = logging.getLogger(__name__)
@@ -77,6 +85,59 @@ def main(
     ctx.obj = app
 
 
+def execute_run(app: App, no_telegram: bool = False, archive_dir: Path | None = None) -> int:
+    """One full run over every account. Returns the process exit code."""
+    # Prevent overlapping runs (manual + scheduled).
+    lock_fh = app.paths.lock_file.open("w")
+    try:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log.warning("Another run is already in progress; exiting.")
+        return 0
+
+    try:
+        config = app.config
+        if archive_dir is not None:
+            config = replace(config, archive_dir=archive_dir.expanduser())
+        strings = config.strings
+
+        real_notifier = (
+            Telegram(config.telegram.token, config.telegram.chat_id) if config.telegram else None
+        )
+        notifier: Notifier = (
+            NullNotifier() if (no_telegram or real_notifier is None) else real_notifier
+        )
+
+        state = State.load(app.paths.state_file)
+        total_failed = 0
+        errors: list[str] = []
+        for account in config.accounts:
+            try:
+                _, failed = run_account(account, config, state, app.paths.state_file, notifier)
+                total_failed += failed
+            except Exception as e:
+                log.exception("[%s] Run failed: %s", account.name, e)
+                errors.append(f"{account.name}: {e}")
+
+        # The failure alert always goes through the real bot, even with --no-telegram.
+        if errors or total_failed:
+            summary = []
+            if errors:
+                summary.append(strings.failure_accounts + "\n" + "\n".join(errors))
+            if total_failed:
+                summary.append(strings.failure_entries.format(count=total_failed))
+            if real_notifier is not None:
+                try:
+                    real_notifier.send_message(strings.failure_header + "\n" + "\n".join(summary))
+                except Exception:
+                    log.exception("Could not send the failure alert to Telegram.")
+            return 1
+        return 0
+    finally:
+        fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        lock_fh.close()
+
+
 @main.command()
 @click.option("--no-telegram", is_flag=True, help="Archive to disk only (backfill, reprocessing).")
 @click.option(
@@ -88,48 +149,45 @@ def main(
 @click.pass_obj
 def run(app: App, no_telegram: bool, archive_dir: Path | None) -> None:
     """Download new entries, archive them and notify."""
-    # Prevent overlapping runs (manual + scheduled).
-    lock_fh = app.paths.lock_file.open("w")
+    sys.exit(execute_run(app, no_telegram, archive_dir))
+
+
+@main.command()
+@click.option(
+    "--schedule",
+    default=None,
+    help=(
+        "Cron expression in the school's timezone "
+        f"(default: $CDD_SCHEDULE or '{DEFAULT_SCHEDULE}')."
+    ),
+)
+@click.option("--run-on-start", is_flag=True, help="Also run immediately when the daemon starts.")
+@click.pass_obj
+def daemon(app: App, schedule: str | None, run_on_start: bool) -> None:
+    """Stay running and execute `run` on a schedule (Docker, NAS)."""
+    expression = schedule or os.environ.get("CDD_SCHEDULE") or DEFAULT_SCHEDULE
     try:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        log.warning("Another run is already in progress; exiting.")
-        sys.exit(0)
-
-    config = app.config
-    if archive_dir is not None:
-        config = replace(config, archive_dir=archive_dir.expanduser())
-    strings = config.strings
-
-    real_notifier = (
-        Telegram(config.telegram.token, config.telegram.chat_id) if config.telegram else None
+        validate_schedule(expression)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    config = app.config  # fail fast on a broken config
+    log.info("Daemon started: schedule %r in %s.", expression, config.timezone)
+    run_daemon(
+        expression,
+        config.tzinfo,
+        DaemonFiles.in_dir(app.paths.data_dir),
+        lambda: execute_run(app),
+        run_on_start=run_on_start,
     )
-    notifier: Notifier = NullNotifier() if (no_telegram or real_notifier is None) else real_notifier
 
-    state = State.load(app.paths.state_file)
-    total_failed = 0
-    errors: list[str] = []
-    for account in config.accounts:
-        try:
-            _, failed = run_account(account, config, state, app.paths.state_file, notifier)
-            total_failed += failed
-        except Exception as e:
-            log.exception("[%s] Run failed: %s", account.name, e)
-            errors.append(f"{account.name}: {e}")
 
-    # The failure alert always goes through the real bot, even with --no-telegram.
-    if errors or total_failed:
-        summary = []
-        if errors:
-            summary.append(strings.failure_accounts + "\n" + "\n".join(errors))
-        if total_failed:
-            summary.append(strings.failure_entries.format(count=total_failed))
-        if real_notifier is not None:
-            try:
-                real_notifier.send_message(strings.failure_header + "\n" + "\n".join(summary))
-            except Exception:
-                log.exception("Could not send the failure alert to Telegram.")
-        sys.exit(1)
+@main.command()
+@click.pass_obj
+def health(app: App) -> None:
+    """Exit 0 if the daemon is alive and its last run succeeded (Docker HEALTHCHECK)."""
+    ok, detail = check_health(DaemonFiles.in_dir(app.paths.data_dir))
+    click.echo(detail)
+    sys.exit(0 if ok else 1)
 
 
 @main.command()

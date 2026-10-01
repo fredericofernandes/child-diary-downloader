@@ -1,0 +1,32 @@
+# docker compose up -d
+#
+# Before the first start:
+#   mkdir -p config data archive
+#   cp config.example.yaml config/config.yaml   # edit: children, routing, language
+#   cp .env.example config/.env                 # edit: passwords and Telegram token
+#
+# The container runs `childdiary daemon`: it stays up and runs the download
+# every day at the time in CDD_SCHEDULE (cron syntax, in the school's
+# timezone from config.yaml). `docker compose exec childdiary childdiary run`
+# triggers an extra run by hand.
+
+services:
+  childdiary:
+    image: ghcr.io/fredericofernandes/child-diary-downloader:latest
+    # To build locally instead (and to set the file owner of the archive):
+    # build:
+    #   context: .
+    #   args:
+    #     UID: 1000
+    #     GID: 1000
+    container_name: childdiary
+    restart: unless-stopped
+    environment:
+      CDD_SCHEDULE: "0 19 * * *"   # every day at 19:00
+      TZ: Europe/Lisbon            # only affects log timestamps
+    volumes:
+      - ./config:/config:ro
+      - ./data:/data
+      - ./archive:/archive
+    # Uncomment if the volumes belong to another user on the host:
+    # user: "1000:1000"

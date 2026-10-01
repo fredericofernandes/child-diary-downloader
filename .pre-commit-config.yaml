@@ -9,7 +9,7 @@ repos:
     rev: v1.18.2
     hooks:
       - id: mypy
-        additional_dependencies: [types-requests, types-PyYAML, click, rich, platformdirs, python-dotenv]
+        additional_dependencies: [types-requests, types-PyYAML, types-croniter, click, rich, platformdirs, python-dotenv, croniter]
         files: ^src/
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0

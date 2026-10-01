@@ -76,6 +76,7 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     """Replace media downloads and exiftool; count downloads per URL."""
     downloads: dict[str, int] = {}
     set_request_delay(0)
+    monkeypatch.delenv("CDD_ARCHIVE_DIR", raising=False)
 
     def fake_download(url: str) -> bytes:
         downloads[url] = downloads.get(url, 0) + 1
