@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="560" viewBox="0 0 380 560" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Example daily summary on Telegram (fictional data)</title>
+  <defs>
+    <clipPath id="screen"><rect x="10" y="10" width="360" height="540" rx="28"/></clipPath>
+  </defs>
+  <rect x="10" y="10" width="360" height="540" rx="28" fill="#0e1621"/>
+  <g clip-path="url(#screen)">
+    <rect x="10" y="10" width="360" height="56" fill="#17212b"/>
+    <circle cx="48" cy="38" r="16" fill="#5288c1"/>
+    <text x="48" y="43" text-anchor="middle" font-size="14" fill="#fff" font-weight="600">CD</text>
+    <text x="74" y="34" font-size="15" fill="#fff" font-weight="600">Creche Exemplo</text>
+    <text x="74" y="52" font-size="12" fill="#8fa3b6">bot</text>
+
+    <!-- bubble 1: daily routine -->
+    <rect x="22" y="80" width="300" height="312" rx="14" fill="#182533"/>
+    <text font-size="13.5" fill="#e9eef3" xml:space="preserve">
+      <tspan x="36" y="104" font-weight="600">[Maria] Rotina Diária:</tspan>
+      <tspan x="36" y="130">🕐 Horário:</tspan>
+      <tspan x="36" y="148">  Entrada: 08:22 (Mãe)</tspan>
+      <tspan x="36" y="166">  Saída: 16:58 (Pai)</tspan>
+      <tspan x="36" y="192">🍴 Refeições:</tspan>
+      <tspan x="36" y="210">  Lanche da Manhã: Fruta — Comeu tudo</tspan>
+      <tspan x="36" y="228">  Bebida: Água</tspan>
+      <tspan x="36" y="246">  Almoço: Sopa e peixe — Comeu quase tudo</tspan>
+      <tspan x="36" y="264">  Lanche da Tarde: Iogurte — Comeu metade</tspan>
+      <tspan x="36" y="290">🌙 Sestas:</tspan>
+      <tspan x="36" y="308">  12:15 — 14:24</tspan>
+      <tspan x="36" y="334">🧩 Actividades:</tspan>
+      <tspan x="36" y="352">  Música</tspan>
+      <tspan x="36" y="370">  Jogo livre</tspan>
+    </text>
+    <text x="308" y="384" text-anchor="end" font-size="10.5" fill="#6d8396">17:02</text>
+
+    <!-- bubble 2: post with album -->
+    <rect x="22" y="404" width="300" height="130" rx="14" fill="#182533"/>
+    <text font-size="13.5" fill="#e9eef3">
+      <tspan x="36" y="428" font-weight="600">[Sala Girassóis] Dia da Primavera 🌸</tspan>
+      <tspan x="36" y="448">Plantámos sementes no jardim.</tspan>
+    </text>
+    <g transform="translate(36 462)">
+      <rect width="86" height="58" rx="6" fill="#4f7a5a"/>
+      <rect x="92" width="86" height="58" rx="6" fill="#7a9e5f"/>
+      <rect x="184" width="86" height="58" rx="6" fill="#5f8a9e"/>
+      <circle cx="43" cy="22" r="8" fill="#f2d16b"/>
+      <path d="M100 50 L130 20 L150 40 L162 30 L178 50 Z" fill="#c7e0a0" opacity=".8"/>
+      <polygon points="214,36 228,22 242,36 236,36 236,44 220,44 220,36" fill="#dbeaf2"/>
+    </g>
+    <text x="308" y="528" text-anchor="end" font-size="10.5" fill="#6d8396">15:41</text>
+  </g>
+  <text x="190" y="556" text-anchor="middle" font-size="9" fill="#8fa3b6">ilustração com dados fictícios</text>
+</svg>

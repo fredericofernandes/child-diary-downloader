@@ -1,0 +1,35 @@
+name: Bug report
+description: Something does not work (PT or EN welcome / em português também)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste real names, IDs, URLs or photos of children.** Replace them before posting.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you run, what did you expect, what did you get?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: From the data folder (`logs/childdiary.log`), with names and IDs replaced.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`childdiary --version` or the Docker image tag"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is it installed?
+      options: [Docker, uv/pipx + launchd, uv/pipx + systemd, uv/pipx + cron, other]
+    validations:
+      required: true

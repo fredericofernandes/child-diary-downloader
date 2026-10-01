@@ -1,0 +1,20 @@
+name: API change or unknown entry type
+description: The school posted something the tool does not understand
+labels: [api]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Run `childdiary discover`, open `discovery_dump.json` in the data folder and paste **only the structure** of the new entry type below, with every name, ID, URL and text replaced by placeholders.
+  - type: textarea
+    id: structure
+    attributes:
+      label: Entry structure (anonymised)
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What was it in the app?
+      description: A post, a form, a poll, a video call… and what you would expect the tool to do with it.
