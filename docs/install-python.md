@@ -35,7 +35,7 @@ cp config.example.yaml "~/Library/Application Support/childdiary-downloader/conf
 cp .env.example "~/Library/Application Support/childdiary-downloader/.env"
 chmod 600 "~/Library/Application Support/childdiary-downloader/.env"
 childdiary list-groups      # IDs das crianças e nomes das salas
-childdiary run --no-telegram   # primeira carga completa
+childdiary run --no-notify   # primeira carga completa
 ```
 
 `--config` e `--data-dir` (ou `CDD_CONFIG`, `CDD_DATA_DIR`) mudam estes caminhos.

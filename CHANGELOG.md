@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Notifications go through [apprise](https://github.com/caronc/apprise):
+  Telegram, ntfy, email, Discord, Slack, Matrix and a hundred other services
+  are configured as URLs in a `notifiers` list, with `media: false` for
+  text-only destinations. The old `telegram` section still works;
+  `max_age_days` moved to the top level. `--no-telegram` is now `--no-notify`
+  (the old flag still works).
+- `childdiary check` reads only the newest pages instead of the whole diary.
+
 - State moved from `state.json` to a SQLite database (`state.db`): one
   transaction per entry instead of rewriting the whole file, failures keep
   their error message, and every archived file is recorded with its size and

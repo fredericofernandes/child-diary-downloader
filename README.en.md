@@ -44,9 +44,10 @@ account. Use it on your own account only.
 - **Readable document names**: development reports, adapted menus and letters
   addressed to your child get a copy as
   `<Child>/Documents/YYYY-MM-DD — Title.pdf`.
-- **Telegram summaries**: daily routine (drop-off and pick-up, meals, naps,
-  nappies, activities), posts with photo albums, events with dates and RSVP.
-  In English or Portuguese.
+- **Summaries on Telegram, ntfy, email, Discord, Slack…**: daily routine
+  (drop-off and pick-up, meals, naps, nappies, activities), posts with photo
+  albums, events with dates and RSVP. In English or Portuguese, to one or
+  several services at once ([docs/notifiers.md](docs/notifiers.md), Portuguese).
 - **Runs by itself every day**: Docker with a built-in schedule and health
   check, or launchd, systemd and cron. Remembers what it processed, retries
   what failed and alerts you on Telegram if something breaks.
@@ -78,14 +79,15 @@ different schools: one configuration.
 ## 5-minute install (Docker)
 
 You need Docker on a machine that stays on (a NAS, a Raspberry Pi, a mini PC)
-and a Telegram bot (optional: without one it only archives).
+and, optionally, a Telegram bot or another notification service (with none,
+it only archives).
 
 ```sh
 mkdir -p childdiary/{config,data,archive} && cd childdiary
 curl -O https://raw.githubusercontent.com/fredericofernandes/child-diary-downloader/main/compose.yaml
 docker compose run --rm childdiary setup     # logs in, discovers children and rooms, writes the config
 docker compose run --rm childdiary check     # verifies logins, Telegram and the archive folder
-docker compose run --rm childdiary run --no-telegram   # first full download, no notifications
+docker compose run --rm childdiary run --no-notify   # first full download, no notifications
 docker compose up -d                          # from now on, every day at 19:00
 ```
 
@@ -119,9 +121,12 @@ accounts:
 routing:
   groups:
     "Sunflower Room": [Maria]
-telegram:
-  token: ${CDD_TELEGRAM_TOKEN}
-  chat_id: ${CDD_TELEGRAM_CHAT_ID}
+notifiers:
+  - type: telegram
+    token: ${CDD_TELEGRAM_TOKEN}
+    chat_id: ${CDD_TELEGRAM_CHAT_ID}
+  - type: apprise               # ntfy, email, Discord, Slack… (docs/notifiers.md)
+    url: ${CDD_NTFY_URL}
 ```
 
 ### Commands
@@ -131,7 +136,7 @@ telegram:
 | `childdiary setup` | first-run wizard |
 | `childdiary check [--send-test]` | verifies logins, children IDs, Telegram, exiftool |
 | `childdiary run` | downloads what is new, archives and notifies |
-| `childdiary run --no-telegram` | archive only (first load, reprocessing) |
+| `childdiary run --no-notify` | archive only (first load, reprocessing) |
 | `childdiary run --dry-run` | shows what it would do, touches nothing |
 | `childdiary run --since YYYY-MM-DD` | processes entries from that date again (existing files are kept) |
 | `childdiary list-groups` | lists children and rooms per account, with IDs |
@@ -160,7 +165,7 @@ That is by design: add the room to `routing.groups` in `config.yaml` and move
 the folder. The log warns every time it happens.
 
 **Can I download everything again?** Delete `state.db` from the data folder
-and run `childdiary run --no-telegram`. Files that already exist are not
+and run `childdiary run --no-notify`. Files that already exist are not
 downloaded again. `childdiary status` shows what the state knows.
 
 **What about photos the school deleted?** If the file is gone from the server
@@ -172,7 +177,6 @@ and photo apps fall back to the import date. The Docker image includes it.
 
 ## Roadmap
 
-- [ ] More notifiers: email, ntfy, Discord, Slack (via apprise)
 - [ ] One daily digest instead of a message per entry
 - [ ] SQLite state and typed data model for entries
 - [ ] Direct export to Immich and Apple Photos

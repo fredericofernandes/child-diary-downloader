@@ -46,9 +46,11 @@ o acesso automatizado à própria conta. Usa-o apenas na tua conta.
 - **Documentos com nome legível**: relatórios de desenvolvimento, ementas
   adaptadas e circulares dirigidas à tua criança ganham uma cópia em
   `<Criança>/Documentos/AAAA-MM-DD — Título.pdf`.
-- **Resumos no Telegram**: rotina diária (entrada e saída, refeições, sestas,
-  higiene, actividades), publicações com fotos em álbum, eventos com data e
-  pedido de confirmação. Em português ou em inglês.
+- **Resumos no Telegram, ntfy, email, Discord, Slack…**: rotina diária
+  (entrada e saída, refeições, sestas, higiene, actividades), publicações com
+  fotos em álbum, eventos com data e pedido de confirmação. Em português ou
+  em inglês, para um ou vários serviços ao mesmo tempo
+  ([docs/notifiers.md](docs/notifiers.md)).
 - **Corre sozinho todos os dias**: Docker com agendamento interno e
   healthcheck, ou launchd, systemd e cron. Guarda o que já processou, retenta
   o que falhou e avisa-te no Telegram se algo correr mal.
@@ -80,14 +82,15 @@ diferentes: tudo numa configuração.
 ## Instalação em 5 minutos (Docker)
 
 Precisas de Docker num computador que fique ligado (um NAS, um Raspberry Pi,
-um mini-PC) e de um bot do Telegram (opcional: sem ele, só arquiva).
+um mini-PC) e, opcionalmente, de um bot do Telegram ou outro serviço de
+notificações (sem nenhum, só arquiva).
 
 ```sh
 mkdir -p childdiary/{config,data,archive} && cd childdiary
 curl -O https://raw.githubusercontent.com/fredericofernandes/child-diary-downloader/main/compose.yaml
 docker compose run --rm childdiary setup     # faz login, descobre as crianças e salas, escreve a config
 docker compose run --rm childdiary check     # confirma logins, Telegram e pasta do arquivo
-docker compose run --rm childdiary run --no-telegram   # primeira carga completa, sem notificações
+docker compose run --rm childdiary run --no-notify   # primeira carga completa, sem notificações
 docker compose up -d                          # daí em diante, todos os dias às 19:00
 ```
 
@@ -120,9 +123,12 @@ accounts:
 routing:
   groups:
     "Sala Girassóis": [Maria]
-telegram:
-  token: ${CDD_TELEGRAM_TOKEN}
-  chat_id: ${CDD_TELEGRAM_CHAT_ID}
+notifiers:
+  - type: telegram
+    token: ${CDD_TELEGRAM_TOKEN}
+    chat_id: ${CDD_TELEGRAM_CHAT_ID}
+  - type: apprise               # ntfy, email, Discord, Slack… (docs/notifiers.md)
+    url: ${CDD_NTFY_URL}
 ```
 
 ### Comandos
@@ -132,7 +138,7 @@ telegram:
 | `childdiary setup` | assistente de primeira configuração |
 | `childdiary check [--send-test]` | valida logins, IDs das crianças, Telegram, exiftool |
 | `childdiary run` | descarrega o que é novo, arquiva e notifica |
-| `childdiary run --no-telegram` | só arquiva (primeira carga, reprocessamento) |
+| `childdiary run --no-notify` | só arquiva (primeira carga, reprocessamento) |
 | `childdiary run --dry-run` | mostra o que faria, sem tocar em nada |
 | `childdiary run --since AAAA-MM-DD` | volta a processar as entradas desde essa data (ficheiros existentes ficam) |
 | `childdiary list-groups` | lista crianças e salas de cada conta, com IDs |
@@ -161,7 +167,7 @@ ficam em casa: um NAS, um Raspberry Pi ou o teu portátil.
 `config.yaml` e move a pasta. O log avisa sempre que isso acontece.
 
 **Posso re-descarregar tudo?** Apaga o `state.db` da pasta de dados e corre
-`childdiary run --no-telegram`. Ficheiros já existentes não são descarregados
+`childdiary run --no-notify`. Ficheiros já existentes não são descarregados
 outra vez. `childdiary status` mostra o que o estado conhece.
 
 **E as fotos que a escola apagou?** Se o ficheiro já não existe no servidor
@@ -176,7 +182,6 @@ inclui.
 
 ## Roadmap
 
-- [ ] Mais notificadores: email, ntfy, Discord, Slack (via apprise)
 - [ ] Resumo diário único em vez de uma mensagem por entrada
 - [ ] Estado em SQLite e modelo de dados tipado para as entradas
 - [ ] Exportação directa para Immich e Apple Photos

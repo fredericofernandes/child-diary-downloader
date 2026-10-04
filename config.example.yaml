@@ -15,11 +15,20 @@ language: pt
 # Fuso horário da escola (nome IANA). Europe/Lisbon ou Europe/Dublin.
 timezone: Europe/Lisbon
 
-telegram:
-  token: ${CDD_TELEGRAM_TOKEN}
-  chat_id: ${CDD_TELEGRAM_CHAT_ID}
-  # Entradas mais antigas do que isto são arquivadas sem notificar.
-  max_age_days: 3
+# Entradas mais antigas do que isto (em dias) são arquivadas sem notificar.
+max_age_days: 3
+
+# Para onde vão os resumos diários e as fotos. Zero ou mais serviços; sem
+# nenhum, só arquiva. Lista completa de serviços e URLs: docs/notifiers.md
+notifiers:
+  - type: telegram
+    token: ${CDD_TELEGRAM_TOKEN}
+    chat_id: ${CDD_TELEGRAM_CHAT_ID}
+  # - type: apprise
+  #   url: ${CDD_NTFY_URL}        # ntfy://ntfy.sh/o-meu-topico
+  # - type: apprise
+  #   url: ${CDD_EMAIL_URL}       # mailto://user:app-password@gmail.com?to=familia@example.com
+  #   media: false                # só texto, sem anexar fotos
 
 # Uma conta por login no ChildDiary. Cada conta pode ter várias crianças.
 accounts:

@@ -17,7 +17,7 @@ NAS Intel/AMD, nos Synology/QNAP com ARM64 e no Raspberry Pi 4/5 (64 bits).
    dois minutos.
 
 Para a primeira carga completa sem Telegram, abre um terminal no contentor
-(Container → Terminal) e corre `childdiary run --no-telegram`.
+(Container → Terminal) e corre `childdiary run --no-notify`.
 
 ## QNAP (Container Station) e Unraid
 

@@ -18,10 +18,14 @@ Qualquer valor no formato `${NOME}` é substituído pela variável de ambiente
 | `routing.groups` | mapa nome → lista | `{}` | Publicações de uma sala/actividade → pasta(s) de criança. Sem mapeamento, usa-se a sala descoberta nas entradas da criança; sem isso, uma pasta com o nome da sala (com aviso no log). |
 | `routing.instances` | mapa nome → lista | `{}` | Publicações da escola inteira → pasta(s). |
 | `routing.child_since` | mapa nome → data | `{}` | Ignora publicações de escola anteriores à entrada da criança (`AAAA-MM-DD`). Nunca deixa a lista vazia. |
-| `telegram` | mapa ou ausente | ausente | Sem esta secção, só arquiva. |
-| `telegram.token` | texto | obrigatório | Token do bot (`${CDD_TELEGRAM_TOKEN}`). |
-| `telegram.chat_id` | texto | obrigatório | ID do chat ou grupo que recebe as mensagens. |
-| `telegram.max_age_days` | inteiro ≥ 0 | `3` | Entradas mais antigas do que isto são arquivadas sem notificar. `0` desliga o corte. |
+| `max_age_days` | inteiro ≥ 0 | `3` | Entradas mais antigas do que isto são arquivadas sem notificar. `0` desliga o corte. |
+| `notifiers` | lista | `[]` | Serviços que recebem as notificações ([notifiers.md](notifiers.md)). Sem nenhum, só arquiva. |
+| `notifiers[].type` | `telegram` \| `apprise` | `apprise` | `telegram` é um atalho que gera o URL `tgram://`. |
+| `notifiers[].token`, `.chat_id` | texto | obrigatório com `telegram` | Token do bot e ID do chat. |
+| `notifiers[].url` | texto | obrigatório com `apprise` | URL do serviço, normalmente `${VARIAVEL}`. |
+| `notifiers[].media` | booleano | `true` | Também recebe fotos, vídeos e PDFs. |
+| `notifiers[].name` | texto | o tipo | Nome nos logs e no `check`. |
+| `telegram` | mapa | ausente | Formato antigo (até 0.1): equivale a um `notifiers` do tipo `telegram`; `telegram.max_age_days` ainda é lido. |
 | `documents.folder` | texto | `Documentos` / `Documents` | Subpasta de cada criança para PDFs dirigidos só a ela. |
 | `documents.subfolders` | mapa nome → palavras | `{Ementas: [ementa]}` / `{Menus: [menu]}` | PDFs cujo título contém uma das palavras vão para essa subpasta. |
 | `network.request_delay_seconds` | número ≥ 0 | `0.5` | Pausa mínima entre pedidos ao childdiary.net. |

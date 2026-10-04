@@ -11,6 +11,8 @@ from childdiary_downloader.api import fetch_entries, login
 from childdiary_downloader.config import Config
 from childdiary_downloader.notify import AppriseNotifier
 
+CHECK_PAGES = 2
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -49,7 +51,8 @@ def run_checks(config: Config, *, send_test_message: bool = False) -> list[Check
 
         def account_login(account=account) -> str:  # type: ignore[no-untyped-def]
             session = login(account.auth_payload())
-            entries = fetch_entries(session)
+            # The newest pages are enough to prove the login and the children IDs.
+            entries = fetch_entries(session, max_pages=CHECK_PAGES)
             known = sum(
                 1
                 for e in entries
@@ -61,7 +64,7 @@ def run_checks(config: Config, *, send_test_message: bool = False) -> list[Check
                     f"logged in, {len(entries)} entries, but none mention the configured children "
                     "(check the IDs with `childdiary list-groups`)"
                 )
-            return f"logged in, {len(entries)} entries, {known} mention your children"
+            return f"logged in, {len(entries)} recent entries, {known} mention your children"
 
         check(f"account '{account.name}'", account_login)
 

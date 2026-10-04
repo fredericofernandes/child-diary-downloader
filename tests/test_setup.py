@@ -68,12 +68,37 @@ def test_render_config_is_valid_yaml_and_loads() -> None:
         ],
         routing_groups={"Room: Sun": ["Maria: filha"]},
         routing_instances={'Crèche "A"': ["Maria: filha"]},
-        telegram=True,
+        notifiers=[
+            {"type": "telegram"},
+            {"type": "apprise", "env_var": "CDD_NOTIFIER_1_URL", "media": False},
+        ],
     )
     data = yaml.safe_load(text)
     assert data["accounts"][0]["name"] == 'Crèche "A"'
     assert data["routing"]["groups"] == {"Room: Sun": ["Maria: filha"]}
-    assert data["telegram"]["token"] == "${CDD_TELEGRAM_TOKEN}"
+    assert data["max_age_days"] == 3
+    assert data["notifiers"] == [
+        {
+            "type": "telegram",
+            "token": "${CDD_TELEGRAM_TOKEN}",
+            "chat_id": "${CDD_TELEGRAM_CHAT_ID}",
+        },
+        {"type": "apprise", "url": "${CDD_NOTIFIER_1_URL}", "media": False},
+    ]
+    assert (
+        yaml.safe_load(
+            render_config(
+                language="pt",
+                timezone="Europe/Lisbon",
+                archive_dir="/a",
+                accounts=[],
+                routing_groups={},
+                routing_instances={},
+                notifiers=[],
+            )
+        )["notifiers"]
+        == []
+    )
 
 
 def test_write_env_merges_and_sets_mode(tmp_path: Path) -> None:
@@ -93,7 +118,12 @@ def rsps() -> Any:
 def test_setup_wizard_end_to_end(
     tmp_path: Path, rsps: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for var in ("CDD_PASSWORD_CRECHE_EXEMPLO", "CDD_TELEGRAM_TOKEN", "CDD_TELEGRAM_CHAT_ID"):
+    for var in (
+        "CDD_PASSWORD_CRECHE_EXEMPLO",
+        "CDD_TELEGRAM_TOKEN",
+        "CDD_TELEGRAM_CHAT_ID",
+        "CDD_NOTIFIER_1_URL",
+    ):
         monkeypatch.delenv(var, raising=False)
     entries = [
         f.routine(for_items=[f.child(f.MARIA_ID, "Maria", f.ROOM_A_ID)]),
@@ -120,8 +150,12 @@ def test_setup_wizard_end_to_end(
             "-",  # Yoga -> keep in its own folder
             "n",  # another account?
             "y",  # telegram?
-            "123:ABC",  # token
+            "123456:ABCdefGHI",  # token
             "42",  # chat id
+            "y",  # another service?
+            "ntfy://ntfy.sh/creche-exemplo",  # url
+            "n",  # no media for it
+            "n",  # no more services
         ]
     )
     result = CliRunner().invoke(
@@ -138,7 +172,10 @@ def test_setup_wizard_end_to_end(
     assert cfg.accounts[0].children == {f.MARIA_ID: "Maria", f.TOMAS_ID: "Tomás"}
     assert cfg.routing.groups == {"Sala Girassóis": ["Maria"]}
     assert cfg.routing.instances == {"Creche Exemplo": ["Maria", "Tomás"]}
-    assert [n.url for n in cfg.notifiers] == ["tgram://123:ABC/42/"]
+    assert [(n.url, n.media) for n in cfg.notifiers] == [
+        ("tgram://123456:ABCdefGHI/42/", True),
+        ("ntfy://ntfy.sh/creche-exemplo", False),
+    ]
     assert "childdiary check" in result.output
 
 

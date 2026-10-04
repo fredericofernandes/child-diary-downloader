@@ -35,7 +35,7 @@ def test_checks_all_green(tmp_path: Path, rsps: Any) -> None:
     results = {r.name: r for r in run_checks(cfg, send_test_message=True)}
     assert results["archive folder"].ok and (tmp_path / "a").is_dir()
     assert results["account 'Creche Exemplo'"].ok
-    assert "1 mention your children" in results["account 'Creche Exemplo'"].detail
+    assert "1 recent entries, 1 mention your children" in results["account 'Creche Exemplo'"].detail
     assert results["notifier 'telegram'"].detail == "test message sent"
 
 

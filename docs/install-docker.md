@@ -37,7 +37,7 @@ docker compose ps               # "healthy" quando o daemon está vivo
 Para fazer o primeiro download completo sem inundar o Telegram:
 
 ```sh
-docker compose run --rm childdiary run --no-telegram
+docker compose run --rm childdiary run --no-notify
 ```
 
 ## Hora da execução

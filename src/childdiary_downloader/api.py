@@ -102,7 +102,11 @@ def login(auth_data: dict[str, Any]) -> requests.Session:
     return session
 
 
-def fetch_entries(session: requests.Session, known_ids: set[str] | None = None) -> list[Entry]:
+def fetch_entries(
+    session: requests.Session,
+    known_ids: set[str] | None = None,
+    max_pages: int = MAX_PAGES,
+) -> list[Entry]:
     """Fetch entries, newest first, deduplicated by Id.
 
     The server's offset pagination drops about one entry at each page
@@ -112,21 +116,23 @@ def fetch_entries(session: requests.Session, known_ids: set[str] | None = None) 
     """
     merged: dict[str, Entry] = {}
     for count in PAGE_SIZES:
-        for entry in _fetch_pass(session, count, known_ids):
+        for entry in _fetch_pass(session, count, known_ids, max_pages):
             eid = str(entry.get("Id"))
             if eid not in merged:
                 merged[eid] = entry
     return list(merged.values())
 
 
-def _fetch_pass(session: requests.Session, count: int, known_ids: set[str] | None) -> list[Entry]:
+def _fetch_pass(
+    session: requests.Session, count: int, known_ids: set[str] | None, max_pages: int = MAX_PAGES
+) -> list[Entry]:
     """One pagination sweep. Stops at an empty page or, when ``known_ids`` is
     given, after KNOWN_PAGES_TO_STOP consecutive pages of already-processed
     entries, so incremental runs stay fast."""
     entries: list[Entry] = []
     known_ids = known_ids or set()
     known_streak = 0
-    for page in range(MAX_PAGES):
+    for page in range(max_pages):
         params: dict[str, str | int] = {"count": count, "page": page, "type": "All"}
         _throttle.wait()
         resp = session.get(ENTRIES_URL, params=params, timeout=REQUEST_TIMEOUT)
@@ -145,5 +151,6 @@ def _fetch_pass(session: requests.Session, count: int, known_ids: set[str] | Non
             else:
                 known_streak = 0
     else:
-        log.warning("Reached MAX_PAGES (%d): some entries may have been skipped.", MAX_PAGES)
+        if max_pages == MAX_PAGES:
+            log.warning("Reached MAX_PAGES (%d): some entries may have been skipped.", MAX_PAGES)
     return entries

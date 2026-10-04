@@ -110,3 +110,12 @@ def test_throttle_spaces_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     clock["t"] += 0.1
     throttle.wait()
     assert sleeps == [pytest.approx(0.4)]
+
+
+def test_max_pages_limits_both_passes(mocked: Any) -> None:
+    entries = make_entries(1000)
+    server = FlakyServer(entries, drop_at_boundaries=False)
+    mocked.add_callback(responses.GET, api.ENTRIES_URL, callback=server)
+    got = api.fetch_entries(api._make_retry_session(), max_pages=2)
+    assert sorted(server.requests) == [(90, 0), (90, 1), (100, 0), (100, 1)]
+    assert len(got) == 200

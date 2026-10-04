@@ -145,7 +145,7 @@ def render_config(
     accounts: list[dict[str, Any]],
     routing_groups: dict[str, list[str]],
     routing_instances: dict[str, list[str]],
-    telegram: bool,
+    notifiers: list[dict[str, Any]],
 ) -> str:
     """Hand-written YAML so the file keeps helpful comments."""
     lines = [
@@ -155,12 +155,27 @@ def render_config(
         f"timezone: {timezone}",
         "",
     ]
-    if telegram:
+    lines += ["# Entries older than this are archived without notifying.", "max_age_days: 3", ""]
+    if notifiers:
+        lines.append("notifiers:")
+        for n in notifiers:
+            if n["type"] == "telegram":
+                lines += [
+                    "  - type: telegram",
+                    "    token: ${CDD_TELEGRAM_TOKEN}",
+                    "    chat_id: ${CDD_TELEGRAM_CHAT_ID}",
+                ]
+            else:
+                lines += [
+                    "  - type: apprise",
+                    f"    url: ${{{n['env_var']}}}",
+                    f"    media: {'true' if n['media'] else 'false'}",
+                ]
+        lines.append("")
+    else:
         lines += [
-            "telegram:",
-            "  token: ${CDD_TELEGRAM_TOKEN}",
-            "  chat_id: ${CDD_TELEGRAM_CHAT_ID}",
-            "  max_age_days: 3",
+            "# No notifiers: archive only. See docs/notifiers.md to add one.",
+            "notifiers: []",
             "",
         ]
     lines.append("accounts:")
@@ -294,12 +309,21 @@ def run_wizard(config_file: Path, default_archive: str) -> None:
         if not click.confirm("\nAdd another ChildDiary account?", default=False):
             break
 
-    telegram = click.confirm("\nSend daily summaries to Telegram?", default=True)
-    if telegram:
+    notifiers: list[dict[str, Any]] = []
+    if click.confirm("\nSend daily summaries to Telegram?", default=True):
         env_values["CDD_TELEGRAM_TOKEN"] = click.prompt(
             "Bot token (from @BotFather)", hide_input=True
         )
         env_values["CDD_TELEGRAM_CHAT_ID"] = click.prompt("Chat ID")
+        notifiers.append({"type": "telegram"})
+    while click.confirm(
+        "Add another service (ntfy, email, Discord, Slack… via an apprise URL)?", default=False
+    ):
+        url = click.prompt("apprise URL (e.g. ntfy://ntfy.sh/my-topic)", hide_input=True)
+        media = click.confirm("Should it also receive photos, videos and PDFs?", default=True)
+        var = f"CDD_NOTIFIER_{len([n for n in notifiers if n['type'] == 'apprise']) + 1}_URL"
+        env_values[var] = url
+        notifiers.append({"type": "apprise", "env_var": var, "media": media})
 
     config_text = render_config(
         language=language,
@@ -308,7 +332,7 @@ def run_wizard(config_file: Path, default_archive: str) -> None:
         accounts=accounts,
         routing_groups=routing_groups,
         routing_instances=routing_instances,
-        telegram=telegram,
+        notifiers=notifiers,
     )
     config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text(config_text, encoding="utf-8")
@@ -317,6 +341,6 @@ def run_wizard(config_file: Path, default_archive: str) -> None:
 
     console.print(f"\n[green]Written[/green] {config_file} and {config_file.parent / '.env'}")
     console.print("Next steps:")
-    console.print("  childdiary check                 # verify logins, Telegram and exiftool")
-    console.print("  childdiary run --no-telegram     # first full download, without notifications")
+    console.print("  childdiary check --send-test     # verify logins, notifiers and exiftool")
+    console.print("  childdiary run --no-notify       # first full download, without notifications")
     console.print("  childdiary run                   # from then on (schedule it daily)")
