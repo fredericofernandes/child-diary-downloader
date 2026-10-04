@@ -14,7 +14,8 @@ from childdiary_downloader.notify import (
     NullNotifier,
     build_notifier,
 )
-from childdiary_downloader.notify.apprise import _redact
+from childdiary_downloader.notify import apprise as apprise_notifier
+from childdiary_downloader.notify.apprise import _redact, too_big
 
 
 @pytest.fixture
@@ -78,3 +79,36 @@ def test_redact() -> None:
     assert _redact("tgram://123:ABC/42/") == "tgram://…/42/"
     assert _redact("ntfy://ntfy.sh/topic") == "ntfy://…/topic"
     assert _redact("plain") == "plain"
+
+
+def test_oversize_files_are_skipped_not_sent(
+    sent: list[dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(apprise_notifier, "MAX_PHOTO_BYTES", 5)
+    monkeypatch.setattr(apprise_notifier, "MAX_FILE_BYTES", 10)
+    small = tmp_path / "small.jpg"
+    small.write_bytes(b"1234")
+    big_photo = tmp_path / "big.jpg"
+    big_photo.write_bytes(b"123456")
+    big_video = tmp_path / "big.mp4"
+    big_video.write_bytes(b"0" * 11)
+    ok_video = tmp_path / "ok.mp4"
+    ok_video.write_bytes(b"0" * 9)
+    assert [too_big(p) for p in (small, big_photo, big_video, ok_video)] == [
+        False,
+        True,
+        True,
+        False,
+    ]
+    assert too_big(tmp_path / "missing.jpg") is False
+
+    notifier = AppriseNotifier([("ntfy://ntfy.sh/x", True)])
+    notifier.send_files([small, big_photo, big_video, ok_video], "c")
+    assert sent[-1]["files"] == [str(small), str(ok_video)]
+    assert caplog.text.count("Too big to send") == 2
+
+    notifier.send_files([big_video], "c")  # nothing left to send: no call, no error
+    assert len(sent) == 1

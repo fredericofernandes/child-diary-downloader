@@ -21,6 +21,13 @@ log = logging.getLogger(__name__)
 MEDIA_TAG = "media"
 TEXT_TAG = "text"
 
+# Upload limits of the strictest common service (Telegram): a file over the
+# limit stays in the archive only. Sending it would make the service refuse
+# the whole batch and the entry would be retried forever.
+MAX_PHOTO_BYTES = 10 * 1024 * 1024
+MAX_FILE_BYTES = 50 * 1024 * 1024
+PHOTO_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
 
 class AppriseNotifier:
     def __init__(self, urls: list[tuple[str, bool]]) -> None:
@@ -49,9 +56,23 @@ class AppriseNotifier:
             return
         attach = apprise.AppriseAttachment()
         for path in paths:
+            if too_big(path):
+                log.warning("Too big to send, archived only: %s", path)
+                continue
             attach.add(str(path))
+        if not len(attach):
+            return
         if not self._apprise.notify(body=text or " ", attach=attach, tag=MEDIA_TAG):
-            raise NotificationError(f"at least one service refused {len(paths)} file(s)")
+            raise NotificationError(f"at least one service refused {len(attach)} file(s)")
+
+
+def too_big(path: Path) -> bool:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False
+    limit = MAX_PHOTO_BYTES if path.suffix.lower() in PHOTO_SUFFIXES else MAX_FILE_BYTES
+    return size > limit
 
 
 def _redact(url: str) -> str:
