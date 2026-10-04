@@ -174,6 +174,12 @@ class State:
         ).fetchall()
         return [SavedMedia(m, Path(p), s, h) for m, p, s, h in rows]
 
+    def all_media(self) -> list[tuple[str, SavedMedia]]:
+        rows = self._conn.execute(
+            "SELECT entry_id, media_id, path, size, sha256 FROM media ORDER BY path"
+        ).fetchall()
+        return [(e, SavedMedia(m, Path(p), s, h)) for e, m, p, s, h in rows]
+
     def stats(self) -> Stats:
         done, failed = self._conn.execute(
             "SELECT COALESCE(SUM(status = 'done'), 0), COALESCE(SUM(status = 'failed'), 0) "

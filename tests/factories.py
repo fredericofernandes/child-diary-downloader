@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from childdiary_downloader.models import Entry, parse_entry
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 SCHOOL = "Creche Exemplo"
@@ -303,6 +305,11 @@ def write_fixture_files() -> None:
         (FIXTURES / f"{name}.json").write_text(
             json.dumps(entry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
+
+
+def E(raw: dict[str, Any]) -> Entry:
+    """Parse a raw payload the way the runner does."""
+    return parse_entry(raw)
 
 
 def load_fixture(name: str) -> dict[str, Any]:

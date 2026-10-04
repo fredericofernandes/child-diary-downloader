@@ -16,7 +16,6 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
@@ -24,12 +23,11 @@ import requests
 from childdiary_downloader.api import download_file
 from childdiary_downloader.config import DocumentsConfig, Routing
 from childdiary_downloader.i18n import Strings
+from childdiary_downloader.models import Entry, Media
 from childdiary_downloader.notify import MediaItem, Notifier
 from childdiary_downloader.state import SavedMedia, sha256_of
 
 log = logging.getLogger(__name__)
-
-Entry = dict[str, Any]
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".png"}
 VIDEO_EXTS = {".mp4"}
@@ -106,7 +104,7 @@ def parse_dt(s: str) -> datetime:
 
 def _route_to_children(targets: list[str], entry: Entry, routing: Routing) -> list[str]:
     """Drop children who were not enrolled yet on the entry's date (child_since)."""
-    date = (entry.get("CreatedOn") or "")[:10]
+    date = entry.created_on[:10]
     since = routing.child_since
     kept = [c for c in targets if not since.get(c) or date >= since[c]]
     return kept or targets
@@ -131,32 +129,27 @@ def get_entry_info(
     group_fallback = strings.group_fallback if strings else "Group"
     school_fallback = strings.school_fallback if strings else "School"
 
-    names = [
-        children[str(item.get("Id"))]
-        for item in entry.get("For", [])
-        if item.get("Type") == "Child" and item.get("Id") in children
-    ]
+    names = entry.children(children)
     if names:
         unique = list(dict.fromkeys(names))
         prefix = "[" + " & ".join(unique) + "] "
         return names, prefix, unique  # one folder per child
 
-    for item in entry.get("For", []):
-        if item.get("Type") == "Group":
-            gid = item.get("Id")
-            desc = item.get("Description", group_fallback)
+    for item in entry.for_:
+        if item.type == "Group":
+            desc = item.description or group_fallback
             targets = routing.groups.get(desc)
             if targets:
                 return [], f"[{desc}] ", _route_to_children(targets, entry, routing)
-            child_name = group_to_child.get(str(gid)) if gid else None
+            child_name = group_to_child.get(item.id)
             if child_name:
                 return [], f"[{desc}] ", [child_name]
             log.warning(
                 "Unmapped group %r: archiving in its own folder; add it to routing.groups.", desc
             )
             return [], f"[{desc}] ", [desc]
-        if item.get("Type") == "Instance":
-            instance_name = entry.get("InstanceName", school_fallback)
+        if item.type == "Instance":
+            instance_name = entry.instance_name or school_fallback
             targets = routing.instances.get(instance_name)
             if targets:
                 return [], f"[{instance_name}] ", _route_to_children(targets, entry, routing)
@@ -170,7 +163,7 @@ def get_entry_info(
 
 
 def _raw_date(entry: Entry) -> str:
-    return str(entry.get("DisplayDate") or entry.get("CreatedOn") or "")
+    return entry.date_source
 
 
 def _caption_date(entry: Entry, strings: Strings) -> str:
@@ -204,8 +197,8 @@ def process_type1(
     doc_folders: list[str] | None = None,
 ) -> list[SavedMedia]:
     """Photo/text post."""
-    title = entry.get("Title") or ""
-    body = strip_html(entry.get("Text", "") or "")
+    title = entry.title or ""
+    body = strip_html(entry.text or "")
     text = "\n\n".join(filter(None, [title, body]))
     if text:
         notifier.send_message(prefix + text)
@@ -215,7 +208,7 @@ def process_type1(
     return process_medias(
         ctx,
         entry,
-        entry.get("Medias", []),
+        entry.medias,
         notifier,
         folders,
         caption,
@@ -236,25 +229,27 @@ def process_type2(
     s = ctx.strings
     parts = [prefix + s.daily_routine]
 
-    if entry.get("Times"):
+    if entry.times:
         lines = ["", s.schedule]
-        for t in entry["Times"]:
-            for key, label in (("TimeIn", s.check_in), ("TimeOut", s.check_out)):
-                if t.get(key):
-                    who = t.get(f"{key}FamilyMember", "")
-                    line = f"  {label}: {parse_dt(t[key]).strftime('%H:%M')}"
+        for t in entry.times:
+            for stamp, who, label in (
+                (t.time_in, t.time_in_family_member, s.check_in),
+                (t.time_out, t.time_out_family_member, s.check_out),
+            ):
+                if stamp:
+                    line = f"  {label}: {parse_dt(stamp).strftime('%H:%M')}"
                     if who:
                         line += f" ({who})"
                     lines.append(line)
         parts.append("\n".join(lines))
 
-    if entry.get("Meals"):
+    if entry.meals:
         lines = ["", s.meals]
-        for m in entry["Meals"]:
-            title = s.meal_titles.get(m.get("Title", ""), m.get("Title", ""))
-            status = s.meal_status.get(m.get("MealStatus", ""), m.get("MealStatus", ""))
-            drink = s.drink_names.get(m.get("Drink", ""), m.get("Drink", ""))
-            line = f"  {title}: {m.get('Description', '')}"
+        for m in entry.meals:
+            title = s.meal_titles.get(m.title, m.title)
+            status = s.meal_status.get(m.meal_status or "", m.meal_status or "")
+            drink = s.drink_names.get(m.drink or "", m.drink or "")
+            line = f"  {title}: {m.description}"
             if status:
                 line += f" — {status}"
             if drink:
@@ -262,33 +257,27 @@ def process_type2(
             lines.append(line)
         parts.append("\n".join(lines))
 
-    if entry.get("SleepTimes"):
+    if entry.sleep_times:
         lines = ["", s.naps]
-        for nap in entry["SleepTimes"]:
-            begin = parse_dt(nap["begin"]).strftime("%H:%M") if nap.get("begin") else "?"
-            end = parse_dt(nap["end"]).strftime("%H:%M") if nap.get("end") else "?"
+        for nap in entry.sleep_times:
+            begin = parse_dt(nap.begin).strftime("%H:%M") if nap.begin else "?"
+            end = parse_dt(nap.end).strftime("%H:%M") if nap.end else "?"
             lines.append(f"  {begin} — {end}")
         parts.append("\n".join(lines))
 
-    if entry.get("ToiletTimes"):
+    if entry.toilet_times:
+        parts.append("\n".join(["", s.hygiene] + ["  " + t.type for t in entry.toilet_times]))
+
+    if entry.activities:
         parts.append(
-            "\n".join(["", s.hygiene] + ["  " + t.get("type", "") for t in entry["ToiletTimes"]])
+            "\n".join(["", s.activities] + ["  " + a.description for a in entry.activities])
         )
 
-    if entry.get("Activities"):
-        parts.append(
-            "\n".join(
-                ["", s.activities] + ["  " + a.get("Description", "") for a in entry["Activities"]]
-            )
-        )
-
-    if entry.get("Occurrences"):
-        parts.append("\n".join(["", s.occurrences] + ["  " + str(o) for o in entry["Occurrences"]]))
+    if entry.occurrences:
+        parts.append("\n".join(["", s.occurrences] + ["  " + str(o) for o in entry.occurrences]))
 
     notifier.send_message("\n".join(parts))
-    return process_medias(
-        ctx, entry, entry.get("Medias", []), notifier, folders, doc_folders=doc_folders
-    )
+    return process_medias(ctx, entry, entry.medias, notifier, folders, doc_folders=doc_folders)
 
 
 def process_type3(
@@ -300,39 +289,30 @@ def process_type3(
     doc_folders: list[str] | None = None,
 ) -> list[SavedMedia]:
     """ "Magazine" post made of ordered Boxes."""
-    boxes = sorted(entry.get("Boxes", []), key=lambda b: b.get("Order", 0))
+    boxes = sorted(entry.boxes, key=lambda b: b.order)
 
     parts = [
-        strip_html(box.get("Text") or "")
-        for box in boxes
-        if box.get("Type") in ("Title", "Text") and box.get("Text")
+        strip_html(box.text or "") for box in boxes if box.type in ("Title", "Text") and box.text
     ]
     message = "\n\n".join(filter(None, parts))
     if message:
         notifier.send_message(prefix + message)
 
     # Media list in display order (Boxes), falling back to the flat list.
-    media_lookup = {m["Id"]: m for m in entry.get("Medias", [])}
+    media_lookup = {m.id: m for m in entry.medias}
     seen_ids: set[str] = set()
-    ordered_medias = []
+    ordered_medias: list[Media] = []
     for box in boxes:
-        if box.get("Type") == "Media" and box.get("Medias"):
-            for mid in box["Medias"]:
+        if box.type == "Media" and box.medias:
+            for mid in box.medias:
                 if mid in media_lookup and mid not in seen_ids:
                     ordered_medias.append(media_lookup[mid])
                     seen_ids.add(mid)
     if not ordered_medias:
-        ordered_medias = entry.get("Medias", [])
+        ordered_medias = entry.medias
 
     date_str = _caption_date(entry, ctx.strings)
-    title = next(
-        (
-            strip_html(b.get("Text") or "")
-            for b in boxes
-            if b.get("Type") == "Title" and b.get("Text")
-        ),
-        "",
-    )
+    title = next((strip_html(b.text or "") for b in boxes if b.type == "Title" and b.text), "")
     caption = f"{date_str} — {title}" if title else date_str
     return process_medias(
         ctx,
@@ -356,10 +336,10 @@ def process_type5(
 ) -> list[SavedMedia]:
     """Event / invitation."""
     s = ctx.strings
-    title = entry.get("Title") or ""
-    description = entry.get("Description") or ""
-    start = entry.get("StartDateTime") or ""
-    end = entry.get("EndDateTime") or ""
+    title = entry.title or ""
+    description = entry.description or ""
+    start = entry.start_date_time or ""
+    end = entry.end_date_time or ""
     date_fmt = f"{s.caption_date_format} %H:%M"
 
     lines = [f"{s.event}: {title}" if title else s.event]
@@ -369,10 +349,10 @@ def process_type5(
         lines.append(f"{s.event_start}: {parse_dt(start).strftime(date_fmt)}")
     if end:
         lines.append(f"{s.event_end}: {parse_dt(end).strftime(date_fmt)}")
-    if entry.get("RequiresAnswer"):
+    if entry.requires_answer:
         lines.append(s.event_requires_answer)
-    if entry.get("VideoCallId"):
-        lines.append(f"{s.video_call}: {entry['VideoCallId']}")
+    if entry.video_call_id:
+        lines.append(f"{s.video_call}: {entry.video_call_id}")
 
     notifier.send_message(prefix + "\n".join(lines))
 
@@ -381,7 +361,7 @@ def process_type5(
     return process_medias(
         ctx,
         entry,
-        entry.get("Medias", []),
+        entry.medias,
         notifier,
         folders,
         caption,
@@ -398,9 +378,11 @@ def process_unknown(
     folders: list[str],
     doc_folders: list[str] | None = None,
 ) -> list[SavedMedia]:
-    entry_type = entry.get("Type", "?")
+    entry_type = entry.type if entry.type is not None else "?"
     log.warning(
-        "Unknown entry type %s: %s", entry_type, json.dumps(entry, indent=2, ensure_ascii=False)
+        "Unknown entry type %s: %s",
+        entry_type,
+        json.dumps(entry.raw(), indent=2, ensure_ascii=False, default=str),
     )
     notifier.send_message(prefix + ctx.strings.unknown_entry_type.format(type=entry_type))
     return []
@@ -417,7 +399,7 @@ HANDLERS = {1: process_type1, 2: process_type2, 3: process_type3, 5: process_typ
 def _entry_datetime(entry: Entry) -> datetime:
     """Timestamp for file names/EXIF: DisplayDate's day with CreatedOn's time."""
     try:
-        created = parse_dt(entry.get("CreatedOn", ""))
+        created = parse_dt(entry.created_on)
     except ValueError:
         created = datetime(2000, 1, 1)
     try:
@@ -493,7 +475,7 @@ def _embed_metadata(paths: list[str], dt: datetime, description: str) -> None:
 def process_medias(
     ctx: ArchiveContext,
     entry: Entry,
-    medias: list[dict[str, Any]],
+    medias: list[Media],
     notifier: Notifier,
     folders: list[str],
     caption: str = "",
@@ -528,18 +510,18 @@ def process_medias(
     media_ids: dict[str, str] = {}
 
     for idx, media in enumerate(medias, start=1):
-        ext = media.get("Extension", "")
+        ext = media.extension
         file_name = f"{date_str}_{entry_dt.strftime('%H%M%S')}_{idx:02d}{ext}"
         os.makedirs(primary_dir, exist_ok=True)
         primary_path = os.path.join(primary_dir, file_name)
 
         if not os.path.exists(primary_path):
             try:
-                content = download_file(media["Url"])
+                content = download_file(media.url)
             except requests.HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
                     # Blob deleted on the school's CDN: gone for good, keep the entry.
-                    log.warning("Media gone from server (404), skipping: %s%s", media["Id"], ext)
+                    log.warning("Media gone from server (404), skipping: %s%s", media.id, ext)
                     continue
                 raise
             with open(primary_path, "wb") as out:
@@ -553,7 +535,7 @@ def process_medias(
             log.debug("Already exists: %s", primary_path)
 
         all_paths.append(primary_path)
-        media_ids[primary_path] = str(media.get("Id", ""))
+        media_ids[primary_path] = media.id
 
         if ext.lower() == ".pdf" and doc_folders and os.path.exists(primary_path):
             _save_document_copy(ctx, primary_path, doc_folders, date_str, doc_title)

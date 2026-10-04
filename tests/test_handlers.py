@@ -31,7 +31,7 @@ def files_under(root: Path) -> list[str]:
 
 
 def test_type1_message_and_photo(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
-    process_type1(ctx, f.load_fixture("type1_post"), notifier, "[Maria] ", ["Maria"])
+    process_type1(ctx, f.E(f.load_fixture("type1_post")), notifier, "[Maria] ", ["Maria"])
     assert notifier.messages == ["[Maria] Hoje fizemos pinturas com os dedos.\nFoi divertido!"]
     kind, (_path, caption) = notifier.calls[1]
     assert kind == "photo"
@@ -41,12 +41,12 @@ def test_type1_message_and_photo(ctx: ArchiveContext, notifier: RecordingNotifie
 
 def test_type1_title_only_still_notifies(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
     entry = f.post(text="", title="Aviso", medias=[])
-    process_type1(ctx, entry, notifier, "", ["Maria"])
+    process_type1(ctx, f.E(entry), notifier, "", ["Maria"])
     assert notifier.messages == ["Aviso"]
 
 
 def test_file_mtime_is_entry_datetime(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
-    process_type1(ctx, f.post(), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
     path = ctx.root / "Maria/2026/2026-03-10/2026-03-10_101530_01.jpg"
     assert datetime.fromtimestamp(os.path.getmtime(path)) == datetime(2026, 3, 10, 10, 15, 30)
 
@@ -74,7 +74,7 @@ def test_file_mtime_uses_school_timezone_not_machine_clock(
                 datetime(2026, 7, 10, 10, 15, 30, tzinfo=lisbon),
             ),  # summer
         ):
-            process_type1(ctx, f.post(created=created), notifier, "", ["Maria"])
+            process_type1(ctx, f.E(f.post(created=created)), notifier, "", ["Maria"])
             path = ctx.root / f"Maria/{created[:4]}/{created[:10]}/{created[:10]}_101530_01.jpg"
             assert datetime.fromtimestamp(os.path.getmtime(path), tz=lisbon) == expected
     finally:
@@ -86,7 +86,7 @@ def test_display_date_wins_over_created_for_folder(
     ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
     entry = f.post(created="2026-03-12T09:00:00.000Z", display="2026-03-10T00:00:00Z")
-    process_type1(ctx, entry, notifier, "", ["Maria"])
+    process_type1(ctx, f.E(entry), notifier, "", ["Maria"])
     # Folder/day from DisplayDate, time of day from CreatedOn.
     assert files_under(ctx.root) == ["Maria/2026/2026-03-10/2026-03-10_090000_01.jpg"]
 
@@ -95,7 +95,7 @@ def test_display_date_wins_over_created_for_folder(
 
 
 def test_type2_routine_in_portuguese(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
-    process_type2(ctx, f.load_fixture("type2_routine"), notifier, "[Maria] ", ["Maria"])
+    process_type2(ctx, f.E(f.load_fixture("type2_routine")), notifier, "[Maria] ", ["Maria"])
     assert notifier.messages == [
         "[Maria] Rotina Diária:\n"
         "\n🕐 Horário:\n  Entrada: 08:22 (Mãe)\n  Saída: 16:58 (Pai)\n"
@@ -113,7 +113,7 @@ def test_type2_routine_in_portuguese(ctx: ArchiveContext, notifier: RecordingNot
 def test_type2_routine_in_english(tmp_path: Path, notifier: RecordingNotifier) -> None:
     cfg = make_config(language="en", archive_dir=str(tmp_path))
     ctx = ArchiveContext(root=cfg.archive_dir, strings=cfg.strings, documents=cfg.documents)
-    process_type2(ctx, f.routine(), notifier, "[Maria] ", ["Maria"])
+    process_type2(ctx, f.E(f.routine()), notifier, "[Maria] ", ["Maria"])
     text = notifier.messages[0]
     assert text.startswith("[Maria] Daily routine:")
     assert "  Morning snack: Fruta — Ate everything\n  Drink: Water" in text
@@ -130,7 +130,7 @@ def test_type2_unknown_enum_values_pass_through(
     entry["Times"] = []
     entry["SleepTimes"] = [{"begin": None, "end": "2026-03-10T14:00:00Z"}]
     entry["Occurrences"] = ["Caiu no recreio"]
-    process_type2(ctx, entry, notifier, "", ["Maria"])
+    process_type2(ctx, f.E(entry), notifier, "", ["Maria"])
     text = notifier.messages[0]
     assert "  Supper: Papa — Lots\n  Bebida: Juice" in text
     assert "  ? — 14:00" in text
@@ -143,7 +143,9 @@ def test_type2_unknown_enum_values_pass_through(
 def test_type3_boxes_sorted_and_media_in_box_order(
     ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
-    process_type3(ctx, f.load_fixture("type3_magazine"), notifier, "[Sala Girassóis] ", ["Maria"])
+    process_type3(
+        ctx, f.E(f.load_fixture("type3_magazine")), notifier, "[Sala Girassóis] ", ["Maria"]
+    )
     assert notifier.messages == [
         "[Sala Girassóis] Dia da Primavera 🌸\n\nQueridas Famílias,\nPlantámos sementes no jardim."
     ]
@@ -163,7 +165,7 @@ def test_type3_without_media_box_uses_flat_list(
     ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
     entry = f.magazine(boxes=[{"Order": 1, "Type": "Text", "Text": "Só texto", "Medias": None}])
-    process_type3(ctx, entry, notifier, "", ["Maria"])
+    process_type3(ctx, f.E(entry), notifier, "", ["Maria"])
     assert len(files_under(ctx.root)) == 3
 
 
@@ -175,7 +177,7 @@ def test_type5_event_message_and_pdf_document_copy(
 ) -> None:
     process_type5(
         ctx,
-        f.load_fixture("type5_event"),
+        f.E(f.load_fixture("type5_event")),
         notifier,
         "[Maria & Tomás] ",
         ["Maria", "Tomás"],
@@ -201,7 +203,7 @@ def test_type5_video_call_and_no_rsvp(ctx: ArchiveContext, notifier: RecordingNo
     entry = f.event(medias=[], description="")
     entry["RequiresAnswer"] = False
     entry["VideoCallId"] = "abc-123"
-    process_type5(ctx, entry, notifier, "", ["Maria"])
+    process_type5(ctx, f.E(entry), notifier, "", ["Maria"])
     assert notifier.messages[0].endswith("🎥 Videochamada: abc-123")
     assert "⚠️" not in notifier.messages[0]
 
@@ -212,13 +214,13 @@ def test_type5_video_call_and_no_rsvp(ctx: ArchiveContext, notifier: RecordingNo
 def test_pdf_not_copied_to_documents_for_class_wide_entries(
     ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
-    process_type5(ctx, f.event(), notifier, "", ["Maria"], doc_folders=[])
+    process_type5(ctx, f.E(f.event()), notifier, "", ["Maria"], doc_folders=[])
     assert files_under(ctx.root) == ["Maria/2026/2026-03-12/2026-03-12_152710_01.pdf"]
 
 
 def test_menu_pdf_goes_to_subfolder(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
     entry = f.event(title="Ementa adaptada - semana 12")
-    process_type5(ctx, entry, notifier, "", ["Maria"], ["Maria"])
+    process_type5(ctx, f.E(entry), notifier, "", ["Maria"], ["Maria"])
     assert "Maria/Documentos/Ementas/2026-03-12 — Ementa adaptada - semana 12.pdf" in files_under(
         ctx.root
     )
@@ -228,7 +230,7 @@ def test_document_title_sanitised_and_duplicates_numbered(
     ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
     entry = f.event(title="Relatório 1.º/2.º período: avaliação")
-    process_type5(ctx, entry, notifier, "", ["Maria"], ["Maria"])
+    process_type5(ctx, f.E(entry), notifier, "", ["Maria"], ["Maria"])
     # Same title, different content: must not overwrite.
     other = f.event(
         entry_id="e5000000-0000-0000-0000-000000000002",
@@ -240,7 +242,7 @@ def test_document_title_sanitised_and_duplicates_numbered(
     handlers.download_file = lambda url: b"%PDF-1.4 a different, longer document"  # type: ignore[assignment]
     try:
         other["CreatedOn"] = "2026-03-12T16:00:00.000Z"
-        process_type5(ctx, other, notifier, "", ["Maria"], ["Maria"])
+        process_type5(ctx, f.E(other), notifier, "", ["Maria"], ["Maria"])
     finally:
         handlers.download_file = handlers_download
     docs = [p for p in files_under(ctx.root) if "/Documentos/" in p]
@@ -257,7 +259,7 @@ def test_titleless_pdf_named_from_message_body(
         text="<p>Querida Família,</p><p>Segue o relatório de desenvolvimento do 1.º período.</p>",
         medias=[f.media("m1000000-0000-0000-0000-000000000009", ".pdf")],
     )
-    process_type1(ctx, entry, notifier, "", ["Maria"], ["Maria"])
+    process_type1(ctx, f.E(entry), notifier, "", ["Maria"], ["Maria"])
     assert (
         "Maria/Documentos/2026-03-10 — Segue o relatório de desenvolvimento do 1.º período..pdf"
         in files_under(ctx.root)
@@ -275,7 +277,7 @@ def test_document_subfolder_matching(config: Config) -> None:
 def test_multi_folder_entries_download_once_and_copy(
     ctx: ArchiveContext, notifier: RecordingNotifier, no_network: dict[str, int]
 ) -> None:
-    process_type1(ctx, f.post(), notifier, "", ["Maria", "Tomás"])
+    process_type1(ctx, f.E(f.post()), notifier, "", ["Maria", "Tomás"])
     assert files_under(ctx.root) == [
         "Maria/2026/2026-03-10/2026-03-10_101530_01.jpg",
         "Tomás/2026/2026-03-10/2026-03-10_101530_01.jpg",
@@ -286,8 +288,8 @@ def test_multi_folder_entries_download_once_and_copy(
 def test_existing_files_are_not_downloaded_again(
     ctx: ArchiveContext, notifier: RecordingNotifier, no_network: dict[str, int]
 ) -> None:
-    process_type1(ctx, f.post(), notifier, "", ["Maria"])
-    process_type1(ctx, f.post(), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
     assert list(no_network.values()) == [1]
     # Still notified both times: idempotency is the caller's job (state).
     assert len([c for c in notifier.calls if c[0] == "photo"]) == 2
@@ -297,7 +299,7 @@ def test_albums_split_in_tens(ctx: ArchiveContext, notifier: RecordingNotifier) 
     medias = [
         f.media(f"m1000000-0000-0000-0000-0000000000{i:02d}", ".jpg", i) for i in range(1, 13)
     ]
-    process_type1(ctx, f.post(medias=medias, text="Doze fotos"), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post(medias=medias, text="Doze fotos")), notifier, "", ["Maria"])
     kinds = [k for k, _ in notifier.calls]
     assert kinds == ["message", "album", "album"]
     assert len(notifier.calls[1][1]) == 10 and len(notifier.calls[2][1]) == 2
@@ -308,7 +310,7 @@ def test_albums_split_in_tens(ctx: ArchiveContext, notifier: RecordingNotifier) 
 def test_single_video_sent_as_video(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
     process_type1(
         ctx,
-        f.post(medias=[f.media("m1000000-0000-0000-0000-000000000005", ".mp4")], text=""),
+        f.E(f.post(medias=[f.media("m1000000-0000-0000-0000-000000000005", ".mp4")], text="")),
         notifier,
         "",
         ["Maria"],
@@ -325,7 +327,7 @@ def test_media_404_is_skipped_not_fatal(
         raise requests.HTTPError(response=resp)
 
     monkeypatch.setattr(handlers, "download_file", gone)
-    process_type1(ctx, f.post(), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
     assert files_under(ctx.root) == []
     assert [k for k, _ in notifier.calls] == ["message"]
 
@@ -340,7 +342,7 @@ def test_other_http_errors_propagate(
 
     monkeypatch.setattr(handlers, "download_file", boom)
     with pytest.raises(requests.HTTPError):
-        process_type1(ctx, f.post(), notifier, "", ["Maria"])
+        process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
 
 
 def test_too_big_files_are_archived_only(
@@ -348,8 +350,8 @@ def test_too_big_files_are_archived_only(
 ) -> None:
     monkeypatch.setattr(handlers, "TG_MAX_PHOTO", 1)
     monkeypatch.setattr(handlers, "TG_MAX_FILE", 1)
-    process_type5(ctx, f.event(), notifier, "", ["Maria"])
-    process_type1(ctx, f.post(text=""), notifier, "", ["Maria"])
+    process_type5(ctx, f.E(f.event()), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post(text="")), notifier, "", ["Maria"])
     assert [k for k, _ in notifier.calls] == ["message"]
     assert len(files_under(ctx.root)) == 2
 
@@ -371,7 +373,7 @@ def test_exiftool_invoked_when_available(
         f.media("m1000000-0000-0000-0000-000000000001", ".jpg"),
         f.media("m1000000-0000-0000-0000-000000000002", ".mp4", 2),
     ]
-    process_type1(ctx, f.post(medias=medias, text="Legenda"), notifier, "", ["Maria"])
+    process_type1(ctx, f.E(f.post(medias=medias, text="Legenda")), notifier, "", ["Maria"])
     assert len(calls) == 2  # photos batch, videos batch
     photo_args, video_args = calls
     assert "-AllDates=2026:03:10 10:15:30" in photo_args
@@ -382,7 +384,7 @@ def test_exiftool_invoked_when_available(
 def test_unknown_type_warns_and_notifies(
     ctx: ArchiveContext, notifier: RecordingNotifier, caplog: pytest.LogCaptureFixture
 ) -> None:
-    process_unknown(ctx, f.load_fixture("type9_unknown"), notifier, "[Maria] ", ["Maria"])
+    process_unknown(ctx, f.E(f.load_fixture("type9_unknown")), notifier, "[Maria] ", ["Maria"])
     assert notifier.messages == [
         "[Maria] [Aviso] Entrada de tipo desconhecido (9). Verifica os logs."
     ]
@@ -393,5 +395,5 @@ def test_process_medias_with_unparseable_dates(
     ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
     entry = f.post(created="garbage", display="garbage")
-    process_medias(ctx, entry, entry["Medias"], notifier, ["Maria"])
+    process_medias(ctx, f.E(entry), f.E(entry).medias, notifier, ["Maria"])
     assert files_under(ctx.root) == ["Maria/unkn/unknown-date/unknown-date_000000_01.jpg"]

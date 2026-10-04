@@ -133,8 +133,10 @@ telegram:
 | `childdiary run` | downloads what is new, archives and notifies |
 | `childdiary run --no-telegram` | archive only (first load, reprocessing) |
 | `childdiary run --dry-run` | shows what it would do, touches nothing |
+| `childdiary run --since YYYY-MM-DD` | processes entries from that date again (existing files are kept) |
 | `childdiary list-groups` | lists children and rooms per account, with IDs |
 | `childdiary status` | processed entries, pending failures, archived files |
+| `childdiary verify [--hash]` | checks the archive against the state: missing or changed files |
 | `childdiary daemon` | stays running and executes on schedule (Docker) |
 | `childdiary health` | daemon status, for the Docker health check |
 

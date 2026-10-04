@@ -46,8 +46,10 @@ running, not needed for tests.
 | Path | What |
 |---|---|
 | `src/childdiary_downloader/api.py` | login, pagination (with the boundary workaround), throttling |
+| `models.py` | typed view of the API payloads (pydantic), `parse_entry` |
 | `handlers.py` | one function per entry type; media download, EXIF, albums |
-| `runner.py` | a run over one account: routing, old-entry cut-off, state |
+| `runner.py` | a run over one account: parsing, routing, old-entry cut-off, state |
+| `state.py` | SQLite state: entries, failures, archived files with hashes |
 | `config.py` | config.yaml schema and `${ENV}` interpolation |
 | `i18n/` | every string a family reads; add a language here |
 | `notify/` | `Notifier` protocol; Telegram implementation |

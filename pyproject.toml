@@ -30,6 +30,7 @@ dependencies = [
   "platformdirs>=4.0",
   "python-dotenv>=1.0",
   "croniter>=6.2.4",
+  "pydantic>=2.7",
 ]
 
 [project.scripts]

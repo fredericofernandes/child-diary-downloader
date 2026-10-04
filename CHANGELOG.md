@@ -14,10 +14,18 @@ All notable changes to this project are documented here. The format follows
   SHA-256. An existing `state.json` is imported on the first run and renamed
   to `state.json.migrated`.
 
+- API entries are validated into typed models (pydantic) before processing.
+  Unknown fields are kept; an entry that fails validation is recorded as
+  failed with the reason, retried on the next run, and never stops the run.
+
 ### Added
 
 - `childdiary status`: entries processed, failures pending retry, archived
   files and bytes.
+- `childdiary run --since YYYY-MM-DD`: process entries from a date again
+  (files already on disk are reused, not downloaded twice).
+- `childdiary verify [--hash]`: compare the archive with the recorded sizes
+  and SHA-256 hashes; reports missing and changed files.
 
 ## [0.1.0] - 2026-10-04
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import logging
 import os
+import re
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -92,6 +93,7 @@ def execute_run(
     no_telegram: bool = False,
     archive_dir: Path | None = None,
     dry_run: bool = False,
+    since: str | None = None,
 ) -> int:
     """One full run over every account. Returns the process exit code."""
     # Prevent overlapping runs (manual + scheduled).
@@ -120,6 +122,11 @@ def execute_run(
         total_failed = 0
         errors: list[str] = []
         with State.open(app.paths.state_db, app.paths.legacy_state_file) as state:
+            if since and not dry_run:
+                forgotten = state.forget_since(since)
+                log.info(
+                    "Forgot %d entries since %s; they will be processed again.", forgotten, since
+                )
             for account in config.accounts:
                 try:
                     _, failed = run_account(account, config, state, notifier, dry_run=dry_run)
@@ -156,10 +163,20 @@ def execute_run(
     help="Archive root (overrides archive_dir from the config).",
 )
 @click.option("--dry-run", is_flag=True, help="Only log what would be processed; touch nothing.")
+@click.option(
+    "--since",
+    metavar="YYYY-MM-DD",
+    default=None,
+    help="Process entries from this date again (existing files are kept).",
+)
 @click.pass_obj
-def run(app: App, no_telegram: bool, archive_dir: Path | None, dry_run: bool) -> None:
+def run(
+    app: App, no_telegram: bool, archive_dir: Path | None, dry_run: bool, since: str | None
+) -> None:
     """Download new entries, archive them and notify."""
-    sys.exit(execute_run(app, no_telegram, archive_dir, dry_run))
+    if since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+        raise click.BadParameter("expected YYYY-MM-DD", param_hint="--since")
+    sys.exit(execute_run(app, no_telegram, archive_dir, dry_run, since))
 
 
 @main.command()
@@ -215,6 +232,33 @@ def status(app: App) -> None:
     console.print(f"Last activity: {st.last_run or '-'}")
     for eid in failed[:10]:
         console.print(f"  failed: {eid}")
+
+
+@main.command()
+@click.option("--hash", "check_hash", is_flag=True, help="Also compare SHA-256 (slower).")
+@click.pass_obj
+def verify(app: App, check_hash: bool) -> None:
+    """Check the archive against the state: missing or changed files."""
+    from childdiary_downloader.state import sha256_of
+
+    missing: list[Path] = []
+    changed: list[Path] = []
+    with State.open(app.paths.state_db, app.paths.legacy_state_file) as state:
+        records = state.all_media()
+    for _entry_id, m in records:
+        if not m.path.exists():
+            missing.append(m.path)
+        elif m.path.stat().st_size != m.size or (check_hash and sha256_of(m.path) != m.sha256):
+            changed.append(m.path)
+    for path in missing:
+        console.print(f"[red]missing[/red] {path}")
+    for path in changed:
+        console.print(f"[yellow]changed[/yellow] {path}")
+    console.print(
+        f"{len(records)} files recorded, {len(missing)} missing, {len(changed)} changed"
+        + ("" if records else " (entries archived before 0.2 have no records)")
+    )
+    sys.exit(1 if missing or changed else 0)
 
 
 @main.command()

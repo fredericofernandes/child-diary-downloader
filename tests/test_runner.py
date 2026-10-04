@@ -283,3 +283,54 @@ def test_cli_run_migrates_legacy_state_then_status(
     result = runner.invoke(main, ["--config", str(config_file), "--data-dir", str(data), "status"])
     assert result.exit_code == 0, result.output
     assert "Entries processed: 1" in result.output
+
+
+def test_cli_since_reprocesses_and_verify_checks_files(
+    tmp_path: Path, rsps: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CDD_PASSWORD", raising=False)
+    monkeypatch.delenv("CDD_TOKEN", raising=False)
+    config_file = write_config(tmp_path)
+    data = tmp_path / "data"
+    old = f.post(
+        entry_id="e1000000-0000-0000-0000-00000000000a", created="2026-01-05T10:00:00.000Z"
+    )
+    new = f.post(
+        entry_id="e1000000-0000-0000-0000-00000000000b", created="2026-03-10T10:15:30.000Z"
+    )
+    mock_api(rsps, [new, old])
+    runner = CliRunner()
+    base = ["--config", str(config_file), "--data-dir", str(data)]
+
+    assert runner.invoke(main, [*base, "run", "--no-telegram"]).exit_code == 0
+    result = runner.invoke(main, [*base, "verify", "--hash"])
+    assert result.exit_code == 0, result.output
+    assert "2 files recorded, 0 missing, 0 changed" in result.output
+
+    # Only the newer entry is forgotten and processed again; the file is reused.
+    result = runner.invoke(main, [*base, "run", "--no-telegram", "--since", "2026-03-01"])
+    assert result.exit_code == 0, result.output
+    assert "Forgot 1 entries since 2026-03-01" in result.output
+    assert "1 new" in result.output
+
+    photo = tmp_path / "archive/Maria/2026/2026-03-10/2026-03-10_101530_01.jpg"
+    photo.write_bytes(b"tampered")
+    (tmp_path / "archive/Maria/2026/2026-01-05/2026-01-05_100000_01.jpg").unlink()
+    result = runner.invoke(main, [*base, "verify"])
+    assert result.exit_code == 1
+    assert "1 missing, 1 changed" in result.output
+
+    result = runner.invoke(main, [*base, "run", "--since", "yesterday"])
+    assert result.exit_code == 2 and "YYYY-MM-DD" in result.output
+
+
+def test_unparseable_entry_is_recorded_as_failed(
+    tmp_path: Path, rsps: Any, notifier: RecordingNotifier
+) -> None:
+    cfg = make_config(archive_dir=str(tmp_path))
+    broken = f.post(entry_id="e1000000-0000-0000-0000-00000000000c")
+    broken["Medias"] = [{"Id": "m", "Url": None}]
+    mock_api(rsps, [broken, f.post()])
+    with State.open(":memory:") as state:
+        assert run_account(cfg.accounts[0], cfg, state, notifier) == (1, 1)
+        assert state.failed_ids == [broken["Id"]]

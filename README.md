@@ -134,8 +134,10 @@ telegram:
 | `childdiary run` | descarrega o que é novo, arquiva e notifica |
 | `childdiary run --no-telegram` | só arquiva (primeira carga, reprocessamento) |
 | `childdiary run --dry-run` | mostra o que faria, sem tocar em nada |
+| `childdiary run --since AAAA-MM-DD` | volta a processar as entradas desde essa data (ficheiros existentes ficam) |
 | `childdiary list-groups` | lista crianças e salas de cada conta, com IDs |
 | `childdiary status` | entradas processadas, falhas pendentes, ficheiros arquivados |
+| `childdiary verify [--hash]` | confere o arquivo com o estado: ficheiros em falta ou alterados |
 | `childdiary daemon` | fica a correr e executa à hora agendada (Docker) |
 | `childdiary health` | estado do daemon, para o healthcheck do Docker |
 

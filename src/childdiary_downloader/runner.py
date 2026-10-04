@@ -17,6 +17,7 @@ from childdiary_downloader.handlers import (
     parse_dt,
     process_unknown,
 )
+from childdiary_downloader.models import Entry, EntryParseError, parse_entry
 from childdiary_downloader.notify import Notifier, NullNotifier
 from childdiary_downloader.state import State
 
@@ -101,38 +102,46 @@ def run_account(
         fetch_known = set()
 
     log.info("[%s] Fetching entries…", name)
-    entries = fetch_entries(session, fetch_known)
-    new_entries = [e for e in entries if e.get("Id") not in known_ids]
-    log.info("[%s] Fetched %d entries, %d new.", name, len(entries), len(new_entries))
-
-    # Oldest first, so notifications and state updates follow chronology.
-    new_entries.sort(key=lambda e: e.get("CreatedOn", ""))
+    raw_entries = fetch_entries(session, fetch_known)
+    new_raw = [e for e in raw_entries if e.get("Id") not in known_ids]
+    log.info("[%s] Fetched %d entries, %d new.", name, len(raw_entries), len(new_raw))
 
     # GroupId -> child name, learned from the children's own entries.
     group_to_child: dict[str, str] = {}
-    for entry in entries:
-        for item in entry.get("For", []):
-            if item.get("Type") == "Child" and item.get("Id") in children:
-                gid = item.get("GroupId")
-                if gid:
-                    group_to_child[gid] = children[item["Id"]]
+    for raw in raw_entries:
+        for item in raw.get("For") or []:
+            if item.get("Type") == "Child" and item.get("Id") in children and item.get("GroupId"):
+                group_to_child[item["GroupId"]] = children[item["Id"]]
+
+    # Oldest first, so notifications and state updates follow chronology.
+    new_raw.sort(key=lambda e: e.get("CreatedOn") or "")
+    new_entries: list[Entry] = []
+    parse_failures = 0
+    for raw in new_raw:
+        try:
+            new_entries.append(parse_entry(raw))
+        except EntryParseError as e:
+            # Keep the run going; the entry stays pending and shows in `status`.
+            log.error("[%s] %s: %s", name, e, e.error.errors()[0].get("msg", ""))
+            if not dry_run:
+                state.mark_failed(e.entry_id, str(e))
+            parse_failures += 1
 
     processed = 0
-    failed = 0
+    failed = parse_failures
     silent = NullNotifier()
     for entry in new_entries:
         names, prefix, folders = get_entry_info(
             entry, children, group_to_child, config.routing, config.strings
         )
-        entry_type = entry.get("Type")
-        created_on = entry.get("CreatedOn", "")
+        entry_type = entry.type
+        created_on = entry.created_on
 
         # PDFs get a copy in <Child>/<Documents>/ only when the entry is addressed
         # exclusively to our children (reports, adapted menus…); class-wide
         # circulars list every child in the room and stay in the date folders.
-        for_items = entry.get("For", [])
-        all_ours = bool(for_items) and all(
-            i.get("Type") == "Child" and i.get("Id") in children for i in for_items
+        all_ours = bool(entry.for_) and all(
+            i.type == "Child" and i.id in children for i in entry.for_
         )
         doc_folders = list(dict.fromkeys(names)) if all_ours else []
 
@@ -168,14 +177,13 @@ def run_account(
             )
             saved = handler(ctx, entry, entry_notifier, prefix, folders, doc_folders)
         except Exception as e:
-            log.error("[%s] Failed entry %s (type=%s): %s", name, entry.get("Id"), entry_type, e)
-            if entry.get("Id"):
-                state.mark_failed(entry["Id"], f"{type(e).__name__}: {e}")
+            log.error("[%s] Failed entry %s (type=%s): %s", name, entry.id, entry_type, e)
+            state.mark_failed(entry.id, f"{type(e).__name__}: {e}")
             failed += 1
             continue
 
-        state.mark_processed(entry["Id"], created_on)
-        state.record_media(entry["Id"], saved)
+        state.mark_processed(entry.id, created_on)
+        state.record_media(entry.id, saved)
         processed += 1
 
     log.info(
