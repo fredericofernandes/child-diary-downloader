@@ -1,6 +1,8 @@
 import os
+import time
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 import requests
@@ -47,6 +49,37 @@ def test_file_mtime_is_entry_datetime(ctx: ArchiveContext, notifier: RecordingNo
     process_type1(ctx, f.post(), notifier, "", ["Maria"])
     path = ctx.root / "Maria/2026/2026-03-10/2026-03-10_101530_01.jpg"
     assert datetime.fromtimestamp(os.path.getmtime(path)) == datetime(2026, 3, 10, 10, 15, 30)
+
+
+def test_file_mtime_uses_school_timezone_not_machine_clock(
+    config: Config, notifier: RecordingNotifier, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TZ", "UTC")  # like a container
+    time.tzset()
+    try:
+        lisbon = ZoneInfo("Europe/Lisbon")
+        ctx = ArchiveContext(
+            root=config.archive_dir,
+            strings=config.strings,
+            documents=config.documents,
+            timezone=lisbon,
+        )
+        for created, expected in (
+            (
+                "2026-03-10T10:15:30.000Z",
+                datetime(2026, 3, 10, 10, 15, 30, tzinfo=lisbon),
+            ),  # winter
+            (
+                "2026-07-10T10:15:30.000Z",
+                datetime(2026, 7, 10, 10, 15, 30, tzinfo=lisbon),
+            ),  # summer
+        ):
+            process_type1(ctx, f.post(created=created), notifier, "", ["Maria"])
+            path = ctx.root / f"Maria/{created[:4]}/{created[:10]}/{created[:10]}_101530_01.jpg"
+            assert datetime.fromtimestamp(os.path.getmtime(path), tz=lisbon) == expected
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()
 
 
 def test_display_date_wins_over_created_for_folder(

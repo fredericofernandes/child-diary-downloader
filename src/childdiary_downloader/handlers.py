@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -46,6 +47,10 @@ class ArchiveContext:
     root: Path
     strings: Strings
     documents: DocumentsConfig
+    # The school's zone: API timestamps are naive local time there. Used to
+    # turn the entry time into an epoch for file mtimes, so the result does
+    # not depend on the machine's own clock (containers usually run in UTC).
+    timezone: ZoneInfo | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +559,7 @@ def process_medias(
     # EXIF on freshly downloaded files, then mtimes and copies to the other folders.
     _embed_metadata(new_photos, entry_dt, caption)
     _embed_metadata(new_videos, entry_dt, "")
-    mtime = entry_dt.timestamp()
+    mtime = (entry_dt.replace(tzinfo=ctx.timezone) if ctx.timezone else entry_dt).timestamp()
     for primary_path in all_paths:
         os.utime(primary_path, (mtime, mtime))
         file_name = os.path.basename(primary_path)

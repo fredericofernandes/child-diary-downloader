@@ -82,7 +82,10 @@ def run_account(
     name = account.name
     children = account.children
     ctx = ArchiveContext(
-        root=config.archive_dir, strings=config.strings, documents=config.documents
+        root=config.archive_dir,
+        strings=config.strings,
+        documents=config.documents,
+        timezone=config.tzinfo,
     )
     known_ids = set(state.processed_ids)
     max_age = timedelta(days=config.telegram.max_age_days if config.telegram else 0)

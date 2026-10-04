@@ -26,6 +26,8 @@ First public release.
 - Workaround for the API's offset pagination dropping an entry at each page
   boundary; early stop on incremental runs; retries with backoff.
 - Honest User-Agent and a configurable pause between requests.
+- File mtimes computed in the school's timezone, so a container running in
+  UTC produces the same dates as a run on a laptop.
 - `childdiary setup` wizard, `childdiary check`, `childdiary list-groups`,
   `childdiary discover`, `childdiary run --no-telegram --dry-run`.
 - `childdiary daemon` with cron schedule and heartbeat, `childdiary health`;
