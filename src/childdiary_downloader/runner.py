@@ -69,7 +69,6 @@ def run_account(
     account: Account,
     config: Config,
     state: State,
-    state_file: Path,
     notifier: Notifier,
     *,
     dry_run: bool = False,
@@ -167,17 +166,16 @@ def run_account(
                 if isinstance(entry_type, int)
                 else process_unknown
             )
-            handler(ctx, entry, entry_notifier, prefix, folders, doc_folders)
+            saved = handler(ctx, entry, entry_notifier, prefix, folders, doc_folders)
         except Exception as e:
             log.error("[%s] Failed entry %s (type=%s): %s", name, entry.get("Id"), entry_type, e)
             if entry.get("Id"):
-                state.mark_failed(entry["Id"])
-                state.save(state_file)
+                state.mark_failed(entry["Id"], f"{type(e).__name__}: {e}")
             failed += 1
             continue
 
         state.mark_processed(entry["Id"], created_on)
-        state.save(state_file)
+        state.record_media(entry["Id"], saved)
         processed += 1
 
     log.info(

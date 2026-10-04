@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from childdiary_downloader import api, checks
 from childdiary_downloader.checks import run_checks
 from childdiary_downloader.cli import main
+from childdiary_downloader.state import State
 from tests import factories as f
 from tests.conftest import make_config
 from tests.test_runner import mock_api, write_config
@@ -74,4 +75,7 @@ def test_dry_run_touches_nothing(
     assert result.exit_code == 0, result.output
     assert "Would process type=1" in result.output
     assert not (tmp_path / "archive").exists()
-    assert not (tmp_path / "data" / "state.json").exists()
+    assert (
+        not (tmp_path / "data" / "state.db").exists()
+        or State.open(tmp_path / "data" / "state.db").stats().done == 0
+    )

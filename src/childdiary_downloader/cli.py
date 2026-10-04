@@ -117,18 +117,16 @@ def execute_run(
         if dry_run:
             log.info("Dry run: nothing will be downloaded, written or sent.")
 
-        state = State.load(app.paths.state_file)
         total_failed = 0
         errors: list[str] = []
-        for account in config.accounts:
-            try:
-                _, failed = run_account(
-                    account, config, state, app.paths.state_file, notifier, dry_run=dry_run
-                )
-                total_failed += failed
-            except Exception as e:
-                log.exception("[%s] Run failed: %s", account.name, e)
-                errors.append(f"{account.name}: {e}")
+        with State.open(app.paths.state_db, app.paths.legacy_state_file) as state:
+            for account in config.accounts:
+                try:
+                    _, failed = run_account(account, config, state, notifier, dry_run=dry_run)
+                    total_failed += failed
+                except Exception as e:
+                    log.exception("[%s] Run failed: %s", account.name, e)
+                    errors.append(f"{account.name}: {e}")
 
         # The failure alert always goes through the real bot, even with --no-telegram.
         if (errors or total_failed) and not dry_run:
@@ -200,6 +198,23 @@ def health(app: App) -> None:
     ok, detail = check_health(DaemonFiles.in_dir(app.paths.data_dir))
     click.echo(detail)
     sys.exit(0 if ok else 1)
+
+
+@main.command()
+@click.pass_obj
+def status(app: App) -> None:
+    """Show what the state knows: entries, failures, archived files."""
+    with State.open(app.paths.state_db, app.paths.legacy_state_file) as state:
+        st = state.stats()
+        failed = state.failed_ids
+    console.print(f"State: [bold]{app.paths.state_db}[/bold]")
+    span = f"from {(st.first_entry or '-')[:10]} to {(st.last_entry or '-')[:10]}"
+    console.print(f"Entries processed: {st.done}  ({span})")
+    console.print(f"Entries pending retry: {st.failed}")
+    console.print(f"Archived files recorded: {st.media_files}  ({st.media_bytes / 1e9:.2f} GB)")
+    console.print(f"Last activity: {st.last_run or '-'}")
+    for eid in failed[:10]:
+        console.print(f"  failed: {eid}")
 
 
 @main.command()

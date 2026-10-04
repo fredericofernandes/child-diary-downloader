@@ -26,4 +26,4 @@ def test_os_defaults_are_absolute(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_runtime_paths_ensure(tmp_path: Path) -> None:
     rp = paths.RuntimePaths(tmp_path / "data")
     rp.ensure()
-    assert rp.log_dir.is_dir() and rp.state_file.parent.is_dir()
+    assert rp.log_dir.is_dir() and rp.state_db.parent.is_dir()

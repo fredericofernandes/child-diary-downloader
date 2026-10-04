@@ -41,7 +41,8 @@ Qualquer valor no formato `${NOME}` é substituído pela variável de ambiente
 
 | Ficheiro | Conteúdo |
 |---|---|
-| `state.json` | IDs já processados (com data) e IDs que falharam e serão retentados |
+| `state.db` | SQLite: entradas processadas (com data e hora), falhas com o erro, e ficheiros arquivados com tamanho e SHA-256. `childdiary status` resume-o. |
+| `state.json.migrated` | o estado das versões anteriores a 0.2, já importado para `state.db` |
 | `.lock` | evita execuções sobrepostas |
 | `logs/childdiary.log` | log com rotação (5 MB × 5) |
 | `heartbeat`, `last_run.json` | escritos pelo daemon, lidos por `childdiary health` |

@@ -63,14 +63,17 @@ def test_run_account_processes_new_entries_oldest_first(
     cfg = make_config(archive_dir=str(tmp_path / "archive"))
     entries = [f.event(), f.magazine(), f.routine(), f.post()]  # newest first, as the API does
     mock_api(rsps, entries)
-    state = State()
-    state_file = tmp_path / "state.json"
-
-    processed, failed = run_account(cfg.accounts[0], cfg, state, state_file, notifier)
-
-    assert (processed, failed) == (4, 0)
-    assert set(state.processed_ids) == {e["Id"] for e in entries}
-    assert State.load(state_file).processed_ids == state.processed_ids
+    db = tmp_path / "state.db"
+    with State.open(db) as state:
+        processed, failed = run_account(cfg.accounts[0], cfg, state, notifier)
+        assert (processed, failed) == (4, 0)
+        assert set(state.processed_ids) == {e["Id"] for e in entries}
+        # Every archived file was recorded with its hash.
+        event_media = state.media_for(entries[0]["Id"])
+        assert [m.path.name for m in event_media] == ["2026-03-12_152710_01.pdf"]
+        assert event_media[0].size == len(b"%PDF-1.4 fake document")
+    with State.open(db) as state:
+        assert len(state.processed_ids) == 4
     assert [m.split("\n")[0] for m in notifier.messages] == [
         "[Maria] Rotina Diária:",
         "[Maria] Hoje fizemos pinturas com os dedos.",
@@ -89,7 +92,8 @@ def test_old_entries_are_archived_silently(
         archive_dir=str(tmp_path), telegram={"token": "t", "chat_id": "1", "max_age_days": 3}
     )
     mock_api(rsps, [f.post(created="2020-01-01T10:00:00.000Z")])
-    run_account(cfg.accounts[0], cfg, State(), tmp_path / "state.json", notifier)
+    with State.open(":memory:") as state:
+        run_account(cfg.accounts[0], cfg, state, notifier)
     assert notifier.calls == []
     assert list((tmp_path / "Maria/2020/2020-01-01").iterdir())
 
@@ -98,8 +102,9 @@ def test_known_entries_are_skipped(tmp_path: Path, rsps: Any, notifier: Recordin
     cfg = make_config(archive_dir=str(tmp_path))
     entry = f.post()
     mock_api(rsps, [entry])
-    state = State(processed_ids={entry["Id"]: entry["CreatedOn"]})
-    assert run_account(cfg.accounts[0], cfg, state, tmp_path / "state.json", notifier) == (0, 0)
+    with State.open(":memory:") as state:
+        state.mark_processed(entry["Id"], entry["CreatedOn"])
+        assert run_account(cfg.accounts[0], cfg, state, notifier) == (0, 0)
     assert notifier.calls == []
 
 
@@ -109,21 +114,21 @@ def test_failed_entry_is_recorded_and_retried(
     cfg = make_config(archive_dir=str(tmp_path))
     entry = f.post()
     mock_api(rsps, [entry])
-    state_file = tmp_path / "state.json"
+    db = tmp_path / "state.db"
 
     def boom(url: str) -> bytes:
         raise RuntimeError("cdn down")
 
     monkeypatch.setattr(handlers, "download_file", boom)
-    state = State()
-    assert run_account(cfg.accounts[0], cfg, state, state_file, notifier) == (0, 1)
-    assert state.failed_ids == [entry["Id"]]
-    assert State.load(state_file).failed_ids == [entry["Id"]]
-
-    # Next run: the failure forces a full fetch and the entry succeeds.
-    monkeypatch.setattr(handlers, "download_file", lambda url: b"ok")
-    assert run_account(cfg.accounts[0], cfg, state, state_file, notifier) == (1, 0)
-    assert state.failed_ids == [] and entry["Id"] in state.processed_ids
+    with State.open(db) as state:
+        assert run_account(cfg.accounts[0], cfg, state, notifier) == (0, 1)
+        assert state.failed_ids == [entry["Id"]]
+    with State.open(db) as state:
+        assert state.failed_ids == [entry["Id"]]
+        # Next run: the failure forces a full fetch and the entry succeeds.
+        monkeypatch.setattr(handlers, "download_file", lambda url: b"ok")
+        assert run_account(cfg.accounts[0], cfg, state, notifier) == (1, 0)
+        assert state.failed_ids == [] and entry["Id"] in state.processed_ids
 
 
 def test_group_posts_use_discovered_mapping_when_not_configured(
@@ -136,7 +141,8 @@ def test_group_posts_use_discovered_mapping_when_not_configured(
         f.routine(for_items=[f.child(f.TOMAS_ID, "Tomás", f.ROOM_B_ID)]),
     ]
     mock_api(rsps, entries)
-    run_account(cfg.accounts[0], cfg, State(), tmp_path / "state.json", notifier)
+    with State.open(":memory:") as state:
+        run_account(cfg.accounts[0], cfg, state, notifier)
     assert (tmp_path / "Tomás/2026/2026-03-11").is_dir()
     assert not (tmp_path / "Sala Papoilas").exists()
 
@@ -171,7 +177,7 @@ def test_cli_run_no_telegram(tmp_path: Path, rsps: Any, monkeypatch: pytest.Monk
         ],
     )
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "data/state.json").exists()
+    assert (tmp_path / "data/state.db").exists()
     assert (tmp_path / "data/logs/childdiary.log").exists()
     assert (tmp_path / "archive/Maria/2026/2026-03-10/2026-03-10_101530_01.jpg").exists()
     assert not any(c.request.url.startswith("https://api.telegram.org") for c in rsps.calls)
@@ -252,3 +258,28 @@ def test_cli_discover(tmp_path: Path, rsps: Any, monkeypatch: pytest.MonkeyPatch
     dump = json.loads((tmp_path / "discovery_dump.json").read_text())
     assert sorted(dump) == ["1", "2"]
     assert cli.console is not None
+
+
+def test_cli_run_migrates_legacy_state_then_status(
+    tmp_path: Path, rsps: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CDD_PASSWORD", raising=False)
+    monkeypatch.delenv("CDD_TOKEN", raising=False)
+    config_file = write_config(tmp_path)
+    data = tmp_path / "data"
+    data.mkdir()
+    entry = f.post()
+    (data / "state.json").write_text(
+        json.dumps({"processed_ids": {entry["Id"]: entry["CreatedOn"]}, "failed_ids": []})
+    )
+    mock_api(rsps, [entry])
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["--config", str(config_file), "--data-dir", str(data), "run", "--no-telegram"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Fetched 1 entries, 0 new" in result.output
+    assert (data / "state.json.migrated").exists() and not (data / "state.json").exists()
+    result = runner.invoke(main, ["--config", str(config_file), "--data-dir", str(data), "status"])
+    assert result.exit_code == 0, result.output
+    assert "Entries processed: 1" in result.output

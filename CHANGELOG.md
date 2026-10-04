@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- State moved from `state.json` to a SQLite database (`state.db`): one
+  transaction per entry instead of rewriting the whole file, failures keep
+  their error message, and every archived file is recorded with its size and
+  SHA-256. An existing `state.json` is imported on the first run and renamed
+  to `state.json.migrated`.
+
+### Added
+
+- `childdiary status`: entries processed, failures pending retry, archived
+  files and bytes.
+
 ## [0.1.0] - 2026-10-04
 
 First public release.

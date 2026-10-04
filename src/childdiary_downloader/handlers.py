@@ -25,6 +25,7 @@ from childdiary_downloader.api import download_file
 from childdiary_downloader.config import DocumentsConfig, Routing
 from childdiary_downloader.i18n import Strings
 from childdiary_downloader.notify import MediaItem, Notifier
+from childdiary_downloader.state import SavedMedia, sha256_of
 
 log = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ def process_type1(
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
-) -> None:
+) -> list[SavedMedia]:
     """Photo/text post."""
     title = entry.get("Title") or ""
     body = strip_html(entry.get("Text", "") or "")
@@ -211,7 +212,7 @@ def process_type1(
 
     date_str = _caption_date(entry, ctx.strings)
     caption = f"{date_str} — {text[:200]}" if text else date_str
-    process_medias(
+    return process_medias(
         ctx,
         entry,
         entry.get("Medias", []),
@@ -230,7 +231,7 @@ def process_type2(
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
-) -> None:
+) -> list[SavedMedia]:
     """Daily routine."""
     s = ctx.strings
     parts = [prefix + s.daily_routine]
@@ -285,7 +286,9 @@ def process_type2(
         parts.append("\n".join(["", s.occurrences] + ["  " + str(o) for o in entry["Occurrences"]]))
 
     notifier.send_message("\n".join(parts))
-    process_medias(ctx, entry, entry.get("Medias", []), notifier, folders, doc_folders=doc_folders)
+    return process_medias(
+        ctx, entry, entry.get("Medias", []), notifier, folders, doc_folders=doc_folders
+    )
 
 
 def process_type3(
@@ -295,7 +298,7 @@ def process_type3(
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
-) -> None:
+) -> list[SavedMedia]:
     """ "Magazine" post made of ordered Boxes."""
     boxes = sorted(entry.get("Boxes", []), key=lambda b: b.get("Order", 0))
 
@@ -331,7 +334,7 @@ def process_type3(
         "",
     )
     caption = f"{date_str} — {title}" if title else date_str
-    process_medias(
+    return process_medias(
         ctx,
         entry,
         ordered_medias,
@@ -350,7 +353,7 @@ def process_type5(
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
-) -> None:
+) -> list[SavedMedia]:
     """Event / invitation."""
     s = ctx.strings
     title = entry.get("Title") or ""
@@ -375,7 +378,7 @@ def process_type5(
 
     date_str = _caption_date(entry, s)
     caption = f"{date_str} — {title}" if title else date_str
-    process_medias(
+    return process_medias(
         ctx,
         entry,
         entry.get("Medias", []),
@@ -394,12 +397,13 @@ def process_unknown(
     prefix: str,
     folders: list[str],
     doc_folders: list[str] | None = None,
-) -> None:
+) -> list[SavedMedia]:
     entry_type = entry.get("Type", "?")
     log.warning(
         "Unknown entry type %s: %s", entry_type, json.dumps(entry, indent=2, ensure_ascii=False)
     )
     notifier.send_message(prefix + ctx.strings.unknown_entry_type.format(type=entry_type))
+    return []
 
 
 HANDLERS = {1: process_type1, 2: process_type2, 3: process_type3, 5: process_type5}
@@ -495,8 +499,10 @@ def process_medias(
     caption: str = "",
     doc_folders: list[str] | None = None,
     doc_title: str = "",
-) -> None:
+) -> list[SavedMedia]:
     """Download, archive on disk and hand the media to the notifier.
+    Returns every file now in the primary folder for this entry, with its
+    size and SHA-256, so the caller can record it in the state.
 
     Files are named <date>_<time>_<NN><ext> (NN = position in the post) and
     saved under <folder>/<year>/<date>/. EXIF dates, description and mtime
@@ -519,6 +525,7 @@ def process_medias(
     new_photos: list[str] = []
     new_videos: list[str] = []
     all_paths: list[str] = []
+    media_ids: dict[str, str] = {}
 
     for idx, media in enumerate(medias, start=1):
         ext = media.get("Extension", "")
@@ -546,6 +553,7 @@ def process_medias(
             log.debug("Already exists: %s", primary_path)
 
         all_paths.append(primary_path)
+        media_ids[primary_path] = str(media.get("Id", ""))
 
         if ext.lower() == ".pdf" and doc_folders and os.path.exists(primary_path):
             _save_document_copy(ctx, primary_path, doc_folders, date_str, doc_title)
@@ -601,3 +609,7 @@ def process_medias(
                     for idx, ((_, ext), handle) in enumerate(zip(batch, handles, strict=True))
                 ]
                 notifier.send_media_group(items)
+
+    return [
+        SavedMedia(media_ids[p], Path(p), os.path.getsize(p), sha256_of(Path(p))) for p in all_paths
+    ]

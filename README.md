@@ -135,6 +135,7 @@ telegram:
 | `childdiary run --no-telegram` | só arquiva (primeira carga, reprocessamento) |
 | `childdiary run --dry-run` | mostra o que faria, sem tocar em nada |
 | `childdiary list-groups` | lista crianças e salas de cada conta, com IDs |
+| `childdiary status` | entradas processadas, falhas pendentes, ficheiros arquivados |
 | `childdiary daemon` | fica a correr e executa à hora agendada (Docker) |
 | `childdiary health` | estado do daemon, para o healthcheck do Docker |
 
@@ -157,9 +158,9 @@ ficam em casa: um NAS, um Raspberry Pi ou o teu portátil.
 É o comportamento previsto: adiciona a sala a `routing.groups` no
 `config.yaml` e move a pasta. O log avisa sempre que isso acontece.
 
-**Posso re-descarregar tudo?** Apaga o `state.json` da pasta de dados e corre
+**Posso re-descarregar tudo?** Apaga o `state.db` da pasta de dados e corre
 `childdiary run --no-telegram`. Ficheiros já existentes não são descarregados
-outra vez.
+outra vez. `childdiary status` mostra o que o estado conhece.
 
 **E as fotos que a escola apagou?** Se o ficheiro já não existe no servidor
 (404), é registado no log e a entrada é dada como feita. O que já estava no

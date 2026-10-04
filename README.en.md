@@ -134,6 +134,7 @@ telegram:
 | `childdiary run --no-telegram` | archive only (first load, reprocessing) |
 | `childdiary run --dry-run` | shows what it would do, touches nothing |
 | `childdiary list-groups` | lists children and rooms per account, with IDs |
+| `childdiary status` | processed entries, pending failures, archived files |
 | `childdiary daemon` | stays running and executes on schedule (Docker) |
 | `childdiary health` | daemon status, for the Docker health check |
 
@@ -156,9 +157,9 @@ NAS, a Raspberry Pi or your laptop.
 That is by design: add the room to `routing.groups` in `config.yaml` and move
 the folder. The log warns every time it happens.
 
-**Can I download everything again?** Delete `state.json` from the data folder
+**Can I download everything again?** Delete `state.db` from the data folder
 and run `childdiary run --no-telegram`. Files that already exist are not
-downloaded again.
+downloaded again. `childdiary status` shows what the state knows.
 
 **What about photos the school deleted?** If the file is gone from the server
 (404) it is logged and the entry is marked done. Whatever was already in your

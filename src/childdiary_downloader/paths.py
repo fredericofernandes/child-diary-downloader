@@ -36,7 +36,8 @@ class RuntimePaths:
 
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
-        self.state_file = data_dir / "state.json"
+        self.state_db = data_dir / "state.db"
+        self.legacy_state_file = data_dir / "state.json"  # pre-0.2, migrated on first run
         self.lock_file = data_dir / ".lock"
         self.log_dir = data_dir / "logs"
         self.discovery_file = data_dir / "discovery_dump.json"
