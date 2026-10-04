@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-04
+
 ### Changed
 
 - Notifications go through [apprise](https://github.com/caronc/apprise):
@@ -67,5 +69,6 @@ First public release.
 - Test suite with fictional fixtures (113 tests), ruff, mypy, pre-commit with
   gitleaks, GitHub Actions CI and release workflow.
 
-[Unreleased]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fredericofernandes/child-diary-downloader/releases/tag/v0.1.0
