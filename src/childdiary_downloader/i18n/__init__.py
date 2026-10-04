@@ -53,6 +53,8 @@ class Strings:
     caption_date_format: str
     # Lines that look like greetings are skipped when naming title-less PDFs
     greeting_pattern: str
+    # Appended when files stayed in the archive because of upload limits
+    too_big_notice: str = "📦 {count} file(s) too big to send, archived only: {names}"
     # Digest mode (one message at the end of the run)
     digest_title: str = "📒 ChildDiary — {date}"
     digest_files: str = "{date} — {count} files"

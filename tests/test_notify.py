@@ -105,10 +105,18 @@ def test_oversize_files_are_skipped_not_sent(
     ]
     assert too_big(tmp_path / "missing.jpg") is False
 
-    notifier = AppriseNotifier([("ntfy://ntfy.sh/x", True)])
-    notifier.send_files([small, big_photo, big_video, ok_video], "c")
+    notifier = AppriseNotifier([("ntfy://ntfy.sh/x", True)], get_strings("pt"))
+    notifier.send_files([small, big_photo, big_video, ok_video], "10/03/2026 — Festa")
     assert sent[-1]["files"] == [str(small), str(ok_video)]
     assert caplog.text.count("Too big to send") == 2
+    # The family is told what stayed behind, appended to the caption.
+    assert sent[-1]["body"] == (
+        "10/03/2026 — Festa\n📦 2 ficheiro(s) demasiado grande(s) para enviar, "
+        "só no arquivo: big.jpg (0 MB), big.mp4 (0 MB)"
+    )
 
-    notifier.send_files([big_video], "c")  # nothing left to send: no call, no error
-    assert len(sent) == 1
+    # Nothing left to attach: the notice goes out as a plain message instead.
+    notifier.send_files([big_video], "")
+    assert sent[-1]["tag"] == "text" and sent[-1]["files"] == []
+    assert sent[-1]["body"].startswith("📦 1 ficheiro(s) demasiado grande(s)")
+    assert len(sent) == 2

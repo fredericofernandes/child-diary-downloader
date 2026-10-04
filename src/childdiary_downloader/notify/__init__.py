@@ -42,9 +42,9 @@ def build_notifier(notifiers: list[NotifierConfig], strings: Strings) -> Notifie
     digest = [(n.url, n.media) for n in notifiers if n.mode == "digest"]
     parts: list[Notifier] = []
     if immediate:
-        parts.append(AppriseNotifier(immediate))
+        parts.append(AppriseNotifier(immediate, strings))
     if digest:
-        parts.append(DigestNotifier(AppriseNotifier(digest), strings))
+        parts.append(DigestNotifier(AppriseNotifier(digest, strings), strings))
     if not parts:
         return NullNotifier()
     return parts[0] if len(parts) == 1 else CompositeNotifier(parts)

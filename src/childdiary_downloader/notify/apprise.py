@@ -14,6 +14,7 @@ from pathlib import Path
 
 import apprise
 
+from childdiary_downloader.i18n import Strings, get_strings
 from childdiary_downloader.notify.base import NotificationError
 
 log = logging.getLogger(__name__)
@@ -30,8 +31,9 @@ PHOTO_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 class AppriseNotifier:
-    def __init__(self, urls: list[tuple[str, bool]]) -> None:
+    def __init__(self, urls: list[tuple[str, bool]], strings: Strings | None = None) -> None:
         """``urls``: (apprise URL, receives files?) per service."""
+        self._strings = strings or get_strings("en")
         self._apprise = apprise.Apprise()
         self._names: list[str] = []
         for url, with_media in urls:
@@ -55,15 +57,32 @@ class AppriseNotifier:
         if not paths or not self.has_media_targets:
             return
         attach = apprise.AppriseAttachment()
+        skipped: list[Path] = []
         for path in paths:
             if too_big(path):
                 log.warning("Too big to send, archived only: %s", path)
+                skipped.append(path)
                 continue
             attach.add(str(path))
-        if not len(attach):
-            return
+        if skipped:
+            # Tell the family there is more in the archive than they received.
+            notice = self._strings.too_big_notice.format(
+                count=len(skipped), names=", ".join(_describe(p) for p in skipped)
+            )
+            if not len(attach):
+                self.send_message(notice)
+                return
+            text = f"{text}\n{notice}" if text.strip() else notice
         if not self._apprise.notify(body=text or " ", attach=attach, tag=MEDIA_TAG):
             raise NotificationError(f"at least one service refused {len(attach)} file(s)")
+
+
+def _describe(path: Path) -> str:
+    try:
+        mb = path.stat().st_size / (1024 * 1024)
+    except OSError:
+        return path.name
+    return f"{path.name} ({mb:.0f} MB)"
 
 
 def too_big(path: Path) -> bool:
