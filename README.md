@@ -182,7 +182,6 @@ inclui.
 
 ## Roadmap
 
-- [ ] Resumo diário único em vez de uma mensagem por entrada
 - [ ] Estado em SQLite e modelo de dados tipado para as entradas
 - [ ] Exportação directa para Immich e Apple Photos
 - [ ] PDF anual por criança (o "livro do ano")

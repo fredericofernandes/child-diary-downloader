@@ -29,6 +29,7 @@ notifiers:
   # - type: apprise
   #   url: ${CDD_EMAIL_URL}       # mailto://user:app-password@gmail.com?to=familia@example.com
   #   media: false                # só texto, sem anexar fotos
+  #   mode: digest                # uma mensagem única no fim de cada execução
 
 # Uma conta por login no ChildDiary. Cada conta pode ter várias crianças.
 accounts:

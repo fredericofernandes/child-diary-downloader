@@ -177,7 +177,6 @@ and photo apps fall back to the import date. The Docker image includes it.
 
 ## Roadmap
 
-- [ ] One daily digest instead of a message per entry
 - [ ] SQLite state and typed data model for entries
 - [ ] Direct export to Immich and Apple Photos
 - [ ] A yearly PDF per child (the "yearbook")

@@ -39,6 +39,9 @@ class RecordingNotifier:
     def send_files(self, paths: list[Path], text: str = "") -> None:
         self.calls.append(("files", ([p.name for p in paths], text)))
 
+    def flush(self) -> None:
+        self.calls.append(("flush", None))
+
 
 def make_config(**overrides: Any) -> Config:
     data: dict[str, Any] = {

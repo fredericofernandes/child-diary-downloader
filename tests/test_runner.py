@@ -336,3 +336,41 @@ def test_unparseable_entry_is_recorded_as_failed(
     with State.open(":memory:") as state:
         assert run_account(cfg.accounts[0], cfg, state, notifier) == (1, 1)
         assert state.failed_ids == [broken["Id"]]
+
+
+def test_cli_digest_sends_one_message_at_the_end(
+    tmp_path: Path, rsps: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import apprise
+
+    monkeypatch.delenv("CDD_PASSWORD", raising=False)
+    monkeypatch.delenv("CDD_TOKEN", raising=False)
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        CONFIG_YAML.format(
+            archive=tmp_path / "archive", maria=f.MARIA_ID, tomas=f.TOMAS_ID
+        ).replace(
+            'telegram:\n  token: ${CDD_TOKEN}\n  chat_id: "1"\n',
+            "max_age_days: 0\nnotifiers:\n  - url: ntfy://ntfy.sh/creche-exemplo\n    mode: digest\n",
+        )
+    )
+    (cfg_dir / ".env").write_text("CDD_PASSWORD=pw\n")
+    bodies: list[tuple[str, int]] = []
+
+    def fake_notify(self: apprise.Apprise, body: str = "", attach: Any = None, **kw: Any) -> bool:
+        bodies.append((body, len(attach) if attach else 0))
+        return True
+
+    monkeypatch.setattr(apprise.Apprise, "notify", fake_notify)
+    mock_api(rsps, [f.routine(), f.post()])
+    result = CliRunner().invoke(
+        main,
+        ["--config", str(cfg_dir / "config.yaml"), "--data-dir", str(tmp_path / "data"), "run"],
+    )
+    assert result.exit_code == 0, result.output
+    assert len(bodies) == 2  # one text digest, one batch of files
+    text, _ = bodies[0]
+    assert text.startswith("📒 Resumo ChildDiary — ")
+    assert "[Maria] Hoje fizemos pinturas" in text and "[Maria] Rotina Diária:" in text
+    assert bodies[1][1] == 1

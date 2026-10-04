@@ -25,6 +25,7 @@ DEFAULT_ARCHIVE_DIR = "~/Pictures/Child-Diary"
 DEFAULT_MAX_AGE_DAYS = 3
 DEFAULT_TIMEZONE = "Europe/Lisbon"
 DEFAULT_REQUEST_DELAY = 0.5
+NOTIFIER_MODES = ("immediate", "digest")
 
 
 class ConfigError(Exception):
@@ -49,6 +50,7 @@ class NotifierConfig:
     url: str
     media: bool = True  # also receives photos, videos and documents
     name: str = ""
+    mode: str = "immediate"  # or "digest": one message at the end of the run
 
 
 def telegram_url(token: str, chat_id: str) -> str:
@@ -203,6 +205,9 @@ def _parse_notifiers(raw_list: Any, legacy_telegram: Any) -> list[NotifierConfig
         media = data.get("media", True)
         if not isinstance(media, bool):
             raise ConfigError(f"{where}.media must be true or false.")
+        mode = str(data.get("mode") or "immediate").lower()
+        if mode not in NOTIFIER_MODES:
+            raise ConfigError(f"{where}.mode must be one of {', '.join(NOTIFIER_MODES)}.")
         if kind == "telegram":
             token = str(_require(data, "token", where))
             chat_id = str(_require(data, "chat_id", where))
@@ -211,7 +216,9 @@ def _parse_notifiers(raw_list: Any, legacy_telegram: Any) -> list[NotifierConfig
             url = str(_require(data, "url", where))
         else:
             raise ConfigError(f"{where}.type must be 'telegram' or 'apprise'.")
-        notifiers.append(NotifierConfig(url=url, media=media, name=str(data.get("name") or kind)))
+        notifiers.append(
+            NotifierConfig(url=url, media=media, name=str(data.get("name") or kind), mode=mode)
+        )
     return notifiers
 
 

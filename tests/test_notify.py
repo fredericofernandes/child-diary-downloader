@@ -7,6 +7,7 @@ import apprise
 import pytest
 
 from childdiary_downloader.config import NotifierConfig
+from childdiary_downloader.i18n import get_strings
 from childdiary_downloader.notify import (
     AppriseNotifier,
     NotificationError,
@@ -32,7 +33,7 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 
 
 def test_build_notifier_without_services_is_null() -> None:
-    assert isinstance(build_notifier([]), NullNotifier)
+    assert isinstance(build_notifier([], get_strings("pt")), NullNotifier)
 
 
 def test_message_goes_to_text_targets_and_files_to_media_targets(
@@ -44,7 +45,8 @@ def test_message_goes_to_text_targets_and_files_to_media_targets(
         [
             NotifierConfig(url="tgram://123:ABC/42/", media=True, name="telegram"),
             NotifierConfig(url="mailto://user:pw@example.com?to=a@b.c", media=False, name="email"),
-        ]
+        ],
+        get_strings("pt"),
     )
     assert repr(notifier) == "AppriseNotifier(tgram://…/42/, mailto://…)"
     notifier.send_message("olá")

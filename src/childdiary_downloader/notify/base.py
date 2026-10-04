@@ -25,6 +25,9 @@ class Notifier(Protocol):
 
     def send_message(self, text: str) -> None: ...
     def send_files(self, paths: list[Path], text: str = "") -> None: ...
+    def flush(self) -> None:
+        """Called once at the end of a run; digests deliver here."""
+        ...
 
 
 class NullNotifier:
@@ -35,3 +38,6 @@ class NullNotifier:
 
     def send_files(self, paths: list[Path], text: str = "") -> None:
         log.info("notify(files): %d file(s) %r", len(paths), text[:80])
+
+    def flush(self) -> None:
+        pass

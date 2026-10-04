@@ -41,6 +41,9 @@ class AppriseNotifier:
         if not self._apprise.notify(body=text, tag=TEXT_TAG):
             raise NotificationError("at least one service refused the message")
 
+    def flush(self) -> None:
+        pass
+
     def send_files(self, paths: list[Path], text: str = "") -> None:
         if not paths or not self.has_media_targets:
             return

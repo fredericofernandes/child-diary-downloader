@@ -68,6 +68,26 @@ Outros servidores: `mailtos://user:pass@smtp.example.com:465?from=…&to=…`.
 A lista completa, com todas as opções, está na
 [wiki do apprise](https://github.com/caronc/apprise/wiki).
 
+## Um resumo por dia em vez de uma mensagem por entrada
+
+`mode: digest` guarda tudo o que a execução produziu e envia uma única
+mensagem no fim (mais um lote com as fotos, se `media: true`). Com a
+execução diária às 19:00, é um resumo do dia. Ideal para email.
+
+```yaml
+notifiers:
+  - type: telegram            # imediato: cada entrada assim que chega
+    token: ${CDD_TELEGRAM_TOKEN}
+    chat_id: ${CDD_TELEGRAM_CHAT_ID}
+  - type: apprise             # um email por dia, só texto
+    url: ${CDD_EMAIL_URL}
+    media: false
+    mode: digest
+```
+
+Resumos muito longos são divididos em várias mensagens, sempre entre
+entradas, nunca a meio de uma.
+
 ## Vários serviços ao mesmo tempo
 
 Sim: por exemplo Telegram com fotos para os pais e email só de texto para os

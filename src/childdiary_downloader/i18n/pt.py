@@ -43,5 +43,7 @@ STRINGS = Strings(
     school_fallback="Escola",
     caption_date_format="%d/%m/%Y",
     greeting_pattern=r"^(olá|ola|querid|car[oa]s?\b|bom dia|boa tarde)",
+    digest_title="📒 Resumo ChildDiary — {date}",
+    digest_files="{date} — {count} fotos, vídeos e documentos",
     unnamed="Sem nome",
 )

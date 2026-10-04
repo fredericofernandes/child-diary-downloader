@@ -53,6 +53,9 @@ class Strings:
     caption_date_format: str
     # Lines that look like greetings are skipped when naming title-less PDFs
     greeting_pattern: str
+    # Digest mode (one message at the end of the run)
+    digest_title: str = "📒 ChildDiary — {date}"
+    digest_files: str = "{date} — {count} files"
     # Shown by `childdiary list-groups`
     unnamed: str = "?"
     extra: dict[str, str] = field(default_factory=dict)

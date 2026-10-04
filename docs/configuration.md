@@ -25,6 +25,7 @@ Qualquer valor no formato `${NOME}` é substituído pela variável de ambiente
 | `notifiers[].url` | texto | obrigatório com `apprise` | URL do serviço, normalmente `${VARIAVEL}`. |
 | `notifiers[].media` | booleano | `true` | Também recebe fotos, vídeos e PDFs. |
 | `notifiers[].name` | texto | o tipo | Nome nos logs e no `check`. |
+| `notifiers[].mode` | `immediate` \| `digest` | `immediate` | `digest` junta tudo numa mensagem no fim da execução. |
 | `telegram` | mapa | ausente | Formato antigo (até 0.1): equivale a um `notifiers` do tipo `telegram`; `telegram.max_age_days` ainda é lido. |
 | `documents.folder` | texto | `Documentos` / `Documents` | Subpasta de cada criança para PDFs dirigidos só a ela. |
 | `documents.subfolders` | mapa nome → palavras | `{Ementas: [ementa]}` / `{Menus: [menu]}` | PDFs cujo título contém uma das palavras vão para essa subpasta. |

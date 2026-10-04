@@ -111,7 +111,7 @@ def execute_run(
         strings = config.strings
 
         try:
-            real_notifier = build_notifier(config.notifiers)
+            real_notifier = build_notifier(config.notifiers, strings)
         except ValueError as e:
             raise click.ClickException(str(e)) from e
         notifier: Notifier = NullNotifier() if (no_notify or dry_run) else real_notifier
@@ -133,6 +133,11 @@ def execute_run(
                 except Exception as e:
                     log.exception("[%s] Run failed: %s", account.name, e)
                     errors.append(f"{account.name}: {e}")
+        try:
+            notifier.flush()  # digests deliver here
+        except Exception as e:
+            log.exception("Could not deliver the digest: %s", e)
+            errors.append(f"digest: {e}")
 
         # The failure alert always goes through the real services, even with --no-notify.
         if (errors or total_failed) and not dry_run:

@@ -72,7 +72,7 @@ def run_checks(config: Config, *, send_test_message: bool = False) -> list[Check
         for n in config.notifiers:
 
             def notifier_check(n=n) -> str:  # type: ignore[no-untyped-def]
-                notifier = AppriseNotifier([(n.url, n.media)])
+                notifier = AppriseNotifier([(n.url, n.media)])  # mode is irrelevant for a test
                 if send_test_message:
                     notifier.send_message("child-diary-downloader: test message ✅")
                     return "test message sent"

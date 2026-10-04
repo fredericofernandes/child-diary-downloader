@@ -15,19 +15,20 @@ All notable changes to this project are documented here. The format follows
   `max_age_days` moved to the top level. `--no-telegram` is now `--no-notify`
   (the old flag still works).
 - `childdiary check` reads only the newest pages instead of the whole diary.
-
 - State moved from `state.json` to a SQLite database (`state.db`): one
   transaction per entry instead of rewriting the whole file, failures keep
   their error message, and every archived file is recorded with its size and
   SHA-256. An existing `state.json` is imported on the first run and renamed
   to `state.json.migrated`.
-
 - API entries are validated into typed models (pydantic) before processing.
   Unknown fields are kept; an entry that fails validation is recorded as
   failed with the reason, retried on the next run, and never stops the run.
 
 ### Added
 
+- `mode: digest` on a notifier: one message (and one batch of files) at the
+  end of the run instead of a message per entry; long digests are split
+  between entries.
 - `childdiary status`: entries processed, failures pending retry, archived
   files and bytes.
 - `childdiary run --since YYYY-MM-DD`: process entries from a date again
