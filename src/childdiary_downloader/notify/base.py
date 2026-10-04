@@ -3,42 +3,35 @@
 from __future__ import annotations
 
 import logging
-from typing import IO, Protocol
+from pathlib import Path
+from typing import Protocol
 
 log = logging.getLogger(__name__)
 
-MediaItem = tuple[IO[bytes], str, str]  # (open file, extension, caption)
+
+class NotificationError(Exception):
+    """A notification could not be delivered. The entry is retried next run."""
 
 
 class Notifier(Protocol):
-    """Anything that can receive the family-facing output of a run.
+    """Receives the family-facing output of a run.
 
-    Implementations must tolerate being called with files that are large or
-    of unknown type; what they cannot deliver they should log and skip,
-    never raise, so the archive side of a run is unaffected.
+    ``send_files`` gets photos, videos or documents already on disk, with an
+    optional text; how they are grouped (albums, one per message) is up to
+    the service. Implementations raise NotificationError when delivery fails
+    so the runner can retry the entry later; they never raise for an
+    unsupported file, which they log and skip.
     """
 
     def send_message(self, text: str) -> None: ...
-    def send_photo(self, fh: IO[bytes], caption: str = "") -> None: ...
-    def send_video(self, fh: IO[bytes], caption: str = "") -> None: ...
-    def send_document(self, fh: IO[bytes], caption: str = "") -> None: ...
-    def send_media_group(self, items: list[MediaItem]) -> None: ...
+    def send_files(self, paths: list[Path], text: str = "") -> None: ...
 
 
 class NullNotifier:
-    """Logs instead of sending (``--no-telegram`` and archive-only setups)."""
+    """Logs instead of sending (``--no-notify``, dry runs, archive-only setups)."""
 
     def send_message(self, text: str) -> None:
         log.info("notify(message): %s", text[:120].replace("\n", " | "))
 
-    def send_photo(self, fh: IO[bytes], caption: str = "") -> None:
-        log.info("notify(photo) caption=%r", caption[:80])
-
-    def send_video(self, fh: IO[bytes], caption: str = "") -> None:
-        log.info("notify(video) caption=%r", caption[:80])
-
-    def send_document(self, fh: IO[bytes], caption: str = "") -> None:
-        log.info("notify(document) caption=%r", caption[:80])
-
-    def send_media_group(self, items: list[MediaItem]) -> None:
-        log.info("notify(media group) %d items", len(items))
+    def send_files(self, paths: list[Path], text: str = "") -> None:
+        log.info("notify(files): %d file(s) %r", len(paths), text[:80])

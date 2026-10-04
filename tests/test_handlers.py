@@ -33,8 +33,8 @@ def files_under(root: Path) -> list[str]:
 def test_type1_message_and_photo(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
     process_type1(ctx, f.E(f.load_fixture("type1_post")), notifier, "[Maria] ", ["Maria"])
     assert notifier.messages == ["[Maria] Hoje fizemos pinturas com os dedos.\nFoi divertido!"]
-    kind, (_path, caption) = notifier.calls[1]
-    assert kind == "photo"
+    names, caption = notifier.files[0]
+    assert names == ["2026-03-10_101530_01.jpg"]
     assert caption.startswith("10/03/2026 — Hoje fizemos")
     assert files_under(ctx.root) == ["Maria/2026/2026-03-10/2026-03-10_101530_01.jpg"]
 
@@ -149,16 +149,14 @@ def test_type3_boxes_sorted_and_media_in_box_order(
     assert notifier.messages == [
         "[Sala Girassóis] Dia da Primavera 🌸\n\nQueridas Famílias,\nPlantámos sementes no jardim."
     ]
-    kind, items = notifier.calls[1]
-    assert kind == "album"
-    # The Media box lists m3, m2, m1 — that order is kept, and only the first has a caption.
-    assert [os.path.basename(p) for p, _, _ in items] == [
+    names, caption = notifier.files[0]
+    # The Media box lists m3, m2, m1 — that order is kept.
+    assert names == [
         "2026-03-11_132127_01.mp4",
         "2026-03-11_132127_02.jpg",
         "2026-03-11_132127_03.jpg",
     ]
-    assert [ext for _, ext, _ in items] == [".mp4", ".jpg", ".jpg"]
-    assert [cap for _, _, cap in items] == ["11/03/2026 — Dia da Primavera 🌸", "", ""]
+    assert caption == "11/03/2026 — Dia da Primavera 🌸"
 
 
 def test_type3_without_media_box_uses_flat_list(
@@ -190,7 +188,7 @@ def test_type5_event_message_and_pdf_document_copy(
         "Fim: 20/03/2026 18:30\n"
         "⚠️ Este evento requer confirmação de presença"
     ]
-    assert notifier.calls[1][0] == "document"
+    assert notifier.files == [(["2026-03-12_152710_01.pdf"], "")]
     assert files_under(ctx.root) == [
         "Maria/2026/2026-03-12/2026-03-12_152710_01.pdf",
         "Maria/Documentos/2026-03-12 — Festa da Primavera.pdf",
@@ -292,19 +290,20 @@ def test_existing_files_are_not_downloaded_again(
     process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
     assert list(no_network.values()) == [1]
     # Still notified both times: idempotency is the caller's job (state).
-    assert len([c for c in notifier.calls if c[0] == "photo"]) == 2
+    assert len(notifier.files) == 2
 
 
-def test_albums_split_in_tens(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
+def test_all_photos_go_to_the_notifier_in_one_call(
+    ctx: ArchiveContext, notifier: RecordingNotifier
+) -> None:
     medias = [
         f.media(f"m1000000-0000-0000-0000-0000000000{i:02d}", ".jpg", i) for i in range(1, 13)
     ]
     process_type1(ctx, f.E(f.post(medias=medias, text="Doze fotos")), notifier, "", ["Maria"])
-    kinds = [k for k, _ in notifier.calls]
-    assert kinds == ["message", "album", "album"]
-    assert len(notifier.calls[1][1]) == 10 and len(notifier.calls[2][1]) == 2
-    assert notifier.calls[1][1][0][2].startswith("10/03/2026 — Doze fotos")
-    assert notifier.calls[2][1][0][2] == ""
+    assert [k for k, _ in notifier.calls] == ["message", "files"]
+    names, caption = notifier.files[0]
+    assert len(names) == 12 and names[0] == "2026-03-10_101530_01.jpg"
+    assert caption.startswith("10/03/2026 — Doze fotos")
 
 
 def test_single_video_sent_as_video(ctx: ArchiveContext, notifier: RecordingNotifier) -> None:
@@ -315,7 +314,7 @@ def test_single_video_sent_as_video(ctx: ArchiveContext, notifier: RecordingNoti
         "",
         ["Maria"],
     )
-    assert notifier.calls[0][0] == "video"
+    assert notifier.files == [(["2026-03-10_101530_01.mp4"], "10/03/2026")]
 
 
 def test_media_404_is_skipped_not_fatal(
@@ -345,15 +344,20 @@ def test_other_http_errors_propagate(
         process_type1(ctx, f.E(f.post()), notifier, "", ["Maria"])
 
 
-def test_too_big_files_are_archived_only(
-    ctx: ArchiveContext, notifier: RecordingNotifier, monkeypatch: pytest.MonkeyPatch
+def test_documents_and_media_are_sent_separately(
+    ctx: ArchiveContext, notifier: RecordingNotifier
 ) -> None:
-    monkeypatch.setattr(handlers, "TG_MAX_PHOTO", 1)
-    monkeypatch.setattr(handlers, "TG_MAX_FILE", 1)
-    process_type5(ctx, f.E(f.event()), notifier, "", ["Maria"])
-    process_type1(ctx, f.E(f.post(text="")), notifier, "", ["Maria"])
-    assert [k for k, _ in notifier.calls] == ["message"]
-    assert len(files_under(ctx.root)) == 2
+    medias = [
+        f.media("m1000000-0000-0000-0000-000000000001", ".jpg"),
+        f.media("m1000000-0000-0000-0000-000000000002", ".pdf", 2),
+        f.media("m1000000-0000-0000-0000-000000000003", ".docx", 3),
+    ]
+    process_type1(ctx, f.E(f.post(medias=medias, text="")), notifier, "", ["Maria"])
+    assert notifier.files == [
+        (["2026-03-10_101530_02.pdf"], ""),
+        (["2026-03-10_101530_03.docx"], ""),
+        (["2026-03-10_101530_01.jpg"], "10/03/2026"),
+    ]
 
 
 def test_exiftool_invoked_when_available(

@@ -88,7 +88,7 @@ def run_account(
         timezone=config.tzinfo,
     )
     known_ids = set(state.processed_ids)
-    max_age = timedelta(days=config.telegram.max_age_days if config.telegram else 0)
+    max_age = timedelta(days=config.max_age_days)
 
     log.info("[%s] Logging in…", name)
     session = login(account.auth_payload())

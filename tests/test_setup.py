@@ -138,11 +138,7 @@ def test_setup_wizard_end_to_end(
     assert cfg.accounts[0].children == {f.MARIA_ID: "Maria", f.TOMAS_ID: "Tomás"}
     assert cfg.routing.groups == {"Sala Girassóis": ["Maria"]}
     assert cfg.routing.instances == {"Creche Exemplo": ["Maria", "Tomás"]}
-    assert (
-        cfg.telegram is not None
-        and cfg.telegram.token == "123:ABC"
-        and cfg.telegram.chat_id == "42"
-    )
+    assert [n.url for n in cfg.notifiers] == ["tgram://123:ABC/42/"]
     assert "childdiary check" in result.output
 
 

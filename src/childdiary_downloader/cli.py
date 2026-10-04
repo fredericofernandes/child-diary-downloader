@@ -19,7 +19,7 @@ from childdiary_downloader.api import set_request_delay
 from childdiary_downloader.checks import run_checks
 from childdiary_downloader.config import DEFAULT_ARCHIVE_DIR, Config, ConfigError, load_config
 from childdiary_downloader.logging_setup import setup_logging
-from childdiary_downloader.notify import Notifier, NullNotifier, Telegram
+from childdiary_downloader.notify import Notifier, NullNotifier, build_notifier
 from childdiary_downloader.paths import RuntimePaths, default_config_file, default_data_dir
 from childdiary_downloader.runner import list_groups, run_account, run_discover
 from childdiary_downloader.scheduler import (
@@ -90,7 +90,7 @@ def main(
 
 def execute_run(
     app: App,
-    no_telegram: bool = False,
+    no_notify: bool = False,
     archive_dir: Path | None = None,
     dry_run: bool = False,
     since: str | None = None,
@@ -110,12 +110,11 @@ def execute_run(
             config = replace(config, archive_dir=archive_dir.expanduser())
         strings = config.strings
 
-        real_notifier = (
-            Telegram(config.telegram.token, config.telegram.chat_id) if config.telegram else None
-        )
-        notifier: Notifier = (
-            NullNotifier() if (no_telegram or dry_run or real_notifier is None) else real_notifier
-        )
+        try:
+            real_notifier = build_notifier(config.notifiers)
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
+        notifier: Notifier = NullNotifier() if (no_notify or dry_run) else real_notifier
         if dry_run:
             log.info("Dry run: nothing will be downloaded, written or sent.")
 
@@ -135,18 +134,17 @@ def execute_run(
                     log.exception("[%s] Run failed: %s", account.name, e)
                     errors.append(f"{account.name}: {e}")
 
-        # The failure alert always goes through the real bot, even with --no-telegram.
+        # The failure alert always goes through the real services, even with --no-notify.
         if (errors or total_failed) and not dry_run:
             summary = []
             if errors:
                 summary.append(strings.failure_accounts + "\n" + "\n".join(errors))
             if total_failed:
                 summary.append(strings.failure_entries.format(count=total_failed))
-            if real_notifier is not None:
-                try:
-                    real_notifier.send_message(strings.failure_header + "\n" + "\n".join(summary))
-                except Exception:
-                    log.exception("Could not send the failure alert to Telegram.")
+            try:
+                real_notifier.send_message(strings.failure_header + "\n" + "\n".join(summary))
+            except Exception:
+                log.exception("Could not send the failure alert.")
             return 1
         return 0
     finally:
@@ -155,7 +153,13 @@ def execute_run(
 
 
 @main.command()
-@click.option("--no-telegram", is_flag=True, help="Archive to disk only (backfill, reprocessing).")
+@click.option(
+    "--no-notify",
+    "--no-telegram",
+    "no_notify",
+    is_flag=True,
+    help="Archive to disk only, no notifications (backfill, reprocessing).",
+)
 @click.option(
     "--archive-dir",
     type=click.Path(path_type=Path),
@@ -171,12 +175,12 @@ def execute_run(
 )
 @click.pass_obj
 def run(
-    app: App, no_telegram: bool, archive_dir: Path | None, dry_run: bool, since: str | None
+    app: App, no_notify: bool, archive_dir: Path | None, dry_run: bool, since: str | None
 ) -> None:
     """Download new entries, archive them and notify."""
     if since and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
         raise click.BadParameter("expected YYYY-MM-DD", param_hint="--since")
-    sys.exit(execute_run(app, no_telegram, archive_dir, dry_run, since))
+    sys.exit(execute_run(app, no_notify, archive_dir, dry_run, since))
 
 
 @main.command()

@@ -88,9 +88,7 @@ def test_run_account_processes_new_entries_oldest_first(
 def test_old_entries_are_archived_silently(
     tmp_path: Path, rsps: Any, notifier: RecordingNotifier
 ) -> None:
-    cfg = make_config(
-        archive_dir=str(tmp_path), telegram={"token": "t", "chat_id": "1", "max_age_days": 3}
-    )
+    cfg = make_config(archive_dir=str(tmp_path), max_age_days=3)
     mock_api(rsps, [f.post(created="2020-01-01T10:00:00.000Z")])
     with State.open(":memory:") as state:
         run_account(cfg.accounts[0], cfg, state, notifier)
@@ -156,7 +154,7 @@ def write_config(tmp_path: Path) -> Path:
     (cfg_dir / "config.yaml").write_text(
         CONFIG_YAML.format(archive=tmp_path / "archive", maria=f.MARIA_ID, tomas=f.TOMAS_ID)
     )
-    (cfg_dir / ".env").write_text("CDD_PASSWORD=pw\nCDD_TOKEN=tok\n")
+    (cfg_dir / ".env").write_text("CDD_PASSWORD=pw\nCDD_TOKEN=123456:ABCdefGHIjkl\n")
     return cfg_dir / "config.yaml"
 
 
@@ -173,7 +171,7 @@ def test_cli_run_no_telegram(tmp_path: Path, rsps: Any, monkeypatch: pytest.Monk
             "--data-dir",
             str(tmp_path / "data"),
             "run",
-            "--no-telegram",
+            "--no-notify",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -190,9 +188,13 @@ def test_cli_run_sends_failure_alert_through_real_bot(
     monkeypatch.delenv("CDD_TOKEN", raising=False)
     config_file = write_config(tmp_path)
     rsps.add(responses.POST, api.LOGIN_URL, status=401)
-    rsps.add(responses.POST, "https://api.telegram.org/bottok/sendMessage", json={"ok": True})
+    rsps.add(
+        responses.POST,
+        "https://api.telegram.org/bot123456:ABCdefGHIjkl/sendMessage",
+        json={"ok": True},
+    )
     result = CliRunner().invoke(
-        main, ["--config", str(config_file), "--data-dir", str(tmp_path), "run", "--no-telegram"]
+        main, ["--config", str(config_file), "--data-dir", str(tmp_path), "run", "--no-notify"]
     )
     assert result.exit_code == 1
     alert = [c for c in rsps.calls if "sendMessage" in c.request.url]
@@ -275,7 +277,7 @@ def test_cli_run_migrates_legacy_state_then_status(
     mock_api(rsps, [entry])
     runner = CliRunner()
     result = runner.invoke(
-        main, ["--config", str(config_file), "--data-dir", str(data), "run", "--no-telegram"]
+        main, ["--config", str(config_file), "--data-dir", str(data), "run", "--no-notify"]
     )
     assert result.exit_code == 0, result.output
     assert "Fetched 1 entries, 0 new" in result.output
@@ -302,13 +304,13 @@ def test_cli_since_reprocesses_and_verify_checks_files(
     runner = CliRunner()
     base = ["--config", str(config_file), "--data-dir", str(data)]
 
-    assert runner.invoke(main, [*base, "run", "--no-telegram"]).exit_code == 0
+    assert runner.invoke(main, [*base, "run", "--no-telegram"]).exit_code == 0  # legacy alias
     result = runner.invoke(main, [*base, "verify", "--hash"])
     assert result.exit_code == 0, result.output
     assert "2 files recorded, 0 missing, 0 changed" in result.output
 
     # Only the newer entry is forgotten and processed again; the file is reused.
-    result = runner.invoke(main, [*base, "run", "--no-telegram", "--since", "2026-03-01"])
+    result = runner.invoke(main, [*base, "run", "--no-notify", "--since", "2026-03-01"])
     assert result.exit_code == 0, result.output
     assert "Forgot 1 entries since 2026-03-01" in result.output
     assert "1 new" in result.output

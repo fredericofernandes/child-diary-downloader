@@ -23,14 +23,20 @@ def rsps() -> Any:
 
 
 def test_checks_all_green(tmp_path: Path, rsps: Any) -> None:
-    cfg = make_config(archive_dir=str(tmp_path / "a"), telegram={"token": "tok", "chat_id": "1"})
+    cfg = make_config(
+        archive_dir=str(tmp_path / "a"), telegram={"token": "123456:ABCdefGHIjkl", "chat_id": "1"}
+    )
     mock_api(rsps, [f.post()])
-    rsps.add(responses.POST, "https://api.telegram.org/bottok/sendMessage", json={"ok": True})
+    rsps.add(
+        responses.POST,
+        "https://api.telegram.org/bot123456:ABCdefGHIjkl/sendMessage",
+        json={"ok": True},
+    )
     results = {r.name: r for r in run_checks(cfg, send_test_message=True)}
     assert results["archive folder"].ok and (tmp_path / "a").is_dir()
     assert results["account 'Creche Exemplo'"].ok
     assert "1 mention your children" in results["account 'Creche Exemplo'"].detail
-    assert results["telegram"].detail == "test message sent"
+    assert results["notifier 'telegram'"].detail == "test message sent"
 
 
 def test_checks_detect_wrong_children_and_bad_login(tmp_path: Path, rsps: Any) -> None:
@@ -39,7 +45,7 @@ def test_checks_detect_wrong_children_and_bad_login(tmp_path: Path, rsps: Any) -
     results = {r.name: r for r in run_checks(cfg)}
     assert not results["account 'Creche Exemplo'"].ok
     assert "none mention the configured children" in results["account 'Creche Exemplo'"].detail
-    assert results["telegram"].detail.startswith("not configured")
+    assert results["notifiers"].detail.startswith("none configured")
 
     rsps.reset()
     rsps.add(responses.POST, api.LOGIN_URL, status=401)

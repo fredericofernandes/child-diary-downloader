@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import IO, Any
+from typing import Any
 
 import pytest
 
@@ -9,7 +9,6 @@ from childdiary_downloader import handlers
 from childdiary_downloader.api import set_request_delay
 from childdiary_downloader.config import Config, parse_config
 from childdiary_downloader.handlers import ArchiveContext
-from childdiary_downloader.notify import MediaItem
 from tests.factories import CHILDREN
 
 FAKE_BYTES = {
@@ -21,7 +20,7 @@ FAKE_BYTES = {
 
 
 class RecordingNotifier:
-    """Records every call; file handles are read so sizes can be asserted."""
+    """Records every call as ("message", text) or ("files", ([names], text))."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, Any]] = []
@@ -30,20 +29,15 @@ class RecordingNotifier:
     def messages(self) -> list[str]:
         return [payload for kind, payload in self.calls if kind == "message"]
 
+    @property
+    def files(self) -> list[tuple[list[str], str]]:
+        return [payload for kind, payload in self.calls if kind == "files"]
+
     def send_message(self, text: str) -> None:
         self.calls.append(("message", text))
 
-    def send_photo(self, fh: IO[bytes], caption: str = "") -> None:
-        self.calls.append(("photo", (fh.name, caption)))
-
-    def send_video(self, fh: IO[bytes], caption: str = "") -> None:
-        self.calls.append(("video", (fh.name, caption)))
-
-    def send_document(self, fh: IO[bytes], caption: str = "") -> None:
-        self.calls.append(("document", (fh.name, caption)))
-
-    def send_media_group(self, items: list[MediaItem]) -> None:
-        self.calls.append(("album", [(fh.name, ext, cap) for fh, ext, cap in items]))
+    def send_files(self, paths: list[Path], text: str = "") -> None:
+        self.calls.append(("files", ([p.name for p in paths], text)))
 
 
 def make_config(**overrides: Any) -> Config:
@@ -68,6 +62,11 @@ def make_config(**overrides: Any) -> Config:
         },
     }
     data.update(overrides)
+    # Fixtures carry fixed dates; unless a test sets the cut-off (directly or
+    # through the legacy telegram section) nothing is treated as old.
+    legacy = overrides.get("telegram") or {}
+    if "max_age_days" not in data and "max_age_days" not in legacy:
+        data["max_age_days"] = 0
     return parse_config(data)
 
 

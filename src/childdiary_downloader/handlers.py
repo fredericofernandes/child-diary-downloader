@@ -12,7 +12,6 @@ import os
 import re
 import shutil
 import subprocess
-from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +23,7 @@ from childdiary_downloader.api import download_file
 from childdiary_downloader.config import DocumentsConfig, Routing
 from childdiary_downloader.i18n import Strings
 from childdiary_downloader.models import Entry, Media
-from childdiary_downloader.notify import MediaItem, Notifier
+from childdiary_downloader.notify import Notifier
 from childdiary_downloader.state import SavedMedia, sha256_of
 
 log = logging.getLogger(__name__)
@@ -32,11 +31,6 @@ log = logging.getLogger(__name__)
 PHOTO_EXTS = {".jpg", ".jpeg", ".png"}
 VIDEO_EXTS = {".mp4"}
 UNKNOWN_FOLDER = "__unknown__"
-
-# Telegram Bot API upload limits: 10 MB photos, 50 MB videos/documents.
-TG_MAX_PHOTO = 10 * 1024 * 1024
-TG_MAX_FILE = 45 * 1024 * 1024  # margin below the hard 50 MB limit
-ALBUM_SIZE = 10
 
 
 @dataclass(frozen=True)
@@ -447,14 +441,6 @@ def _save_document_copy(
             log.info("Document saved: %s", dest)
 
 
-def _too_big_for_telegram(path: str, ext: str) -> bool:
-    limit = TG_MAX_PHOTO if ext.lower() in PHOTO_EXTS else TG_MAX_FILE
-    try:
-        return os.path.getsize(path) > limit
-    except OSError:
-        return False
-
-
 def _embed_metadata(paths: list[str], dt: datetime, description: str) -> None:
     """Write EXIF dates (and the description, for photos) with exiftool.
     Best effort: without exiftool only the file mtime carries the date."""
@@ -490,14 +476,15 @@ def process_medias(
     saved under <folder>/<year>/<date>/. EXIF dates, description and mtime
     are set to the entry date so photo apps sort the archive correctly. Each
     file is saved to every folder in ``folders`` (one download, then copies).
-    Photos and videos go out in albums of up to ALBUM_SIZE; PDFs and unknown
-    formats as documents.
+    Photos and videos go to the notifier together (services that support
+    albums group them); PDFs and other formats go one by one.
 
     PDFs from entries addressed exclusively to our children (``doc_folders``)
     also get a readable-named copy in <Child>/<Documents>/, where development
     reports, adapted menus and the like are easy to find later.
     """
-    photos_videos: list[tuple[str, str]] = []  # (primary_path, ext)
+    photos_videos: list[Path] = []
+    documents: list[Path] = []
 
     entry_dt = _entry_datetime(entry)
     date_str = _archive_date(entry)
@@ -540,11 +527,10 @@ def process_medias(
         if ext.lower() == ".pdf" and doc_folders and os.path.exists(primary_path):
             _save_document_copy(ctx, primary_path, doc_folders, date_str, doc_title)
 
-        if ext in PHOTO_EXTS or ext in VIDEO_EXTS:
-            if _too_big_for_telegram(primary_path, ext):
-                log.warning("Too big for Telegram, archived only: %s", primary_path)
-            else:
-                photos_videos.append((primary_path, ext))
+        if ext.lower() in PHOTO_EXTS or ext.lower() in VIDEO_EXTS:
+            photos_videos.append(Path(primary_path))
+        else:
+            documents.append(Path(primary_path))
 
     # EXIF on freshly downloaded files, then mtimes and copies to the other folders.
     _embed_metadata(new_photos, entry_dt, caption)
@@ -561,36 +547,10 @@ def process_medias(
                 shutil.copy2(primary_path, extra_path)
                 log.info("Copied to %s", extra_path)
 
-    # Non photo/video files (PDFs etc.) go as documents.
-    for primary_path in all_paths:
-        ext = os.path.splitext(primary_path)[1]
-        if ext not in PHOTO_EXTS and ext not in VIDEO_EXTS:
-            if _too_big_for_telegram(primary_path, ext):
-                log.warning("Too big for Telegram, archived only: %s", primary_path)
-                continue
-            with open(primary_path, "rb") as doc:
-                notifier.send_document(doc)
-
-    # Photos/videos in albums.
-    for i in range(0, len(photos_videos), ALBUM_SIZE):
-        batch = photos_videos[i : i + ALBUM_SIZE]
-        batch_caption = caption if i == 0 else ""
-
-        if len(batch) == 1:
-            dest_path, ext = batch[0]
-            with open(dest_path, "rb") as single:
-                if ext in PHOTO_EXTS:
-                    notifier.send_photo(single, caption=batch_caption)
-                else:
-                    notifier.send_video(single, caption=batch_caption)
-        else:
-            with ExitStack() as stack:
-                handles = [stack.enter_context(open(p, "rb")) for p, _ in batch]
-                items: list[MediaItem] = [
-                    (handle, ext, batch_caption if idx == 0 else "")
-                    for idx, ((_, ext), handle) in enumerate(zip(batch, handles, strict=True))
-                ]
-                notifier.send_media_group(items)
+    for document in documents:
+        notifier.send_files([document])
+    if photos_videos:
+        notifier.send_files(photos_videos, caption)
 
     return [
         SavedMedia(media_ids[p], Path(p), os.path.getsize(p), sha256_of(Path(p))) for p in all_paths

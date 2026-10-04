@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from childdiary_downloader.api import fetch_entries, login
 from childdiary_downloader.config import Config
-from childdiary_downloader.notify import Telegram
+from childdiary_downloader.notify import AppriseNotifier
 
 
 @dataclass(frozen=True)
@@ -65,18 +65,17 @@ def run_checks(config: Config, *, send_test_message: bool = False) -> list[Check
 
         check(f"account '{account.name}'", account_login)
 
-    if config.telegram:
-        tg = config.telegram
+    if config.notifiers:
+        for n in config.notifiers:
 
-        def telegram_check() -> str:
-            if send_test_message:
-                Telegram(tg.token, tg.chat_id).send_message(
-                    "child-diary-downloader: test message ✅"
-                )
-                return "test message sent"
-            return "configured (use --send-test to send a message)"
+            def notifier_check(n=n) -> str:  # type: ignore[no-untyped-def]
+                notifier = AppriseNotifier([(n.url, n.media)])
+                if send_test_message:
+                    notifier.send_message("child-diary-downloader: test message ✅")
+                    return "test message sent"
+                return "URL accepted (use --send-test to send a message)"
 
-        check("telegram", telegram_check)
+            check(f"notifier '{n.name}'", notifier_check)
     else:
-        results.append(CheckResult("telegram", True, "not configured: archive only"))
+        results.append(CheckResult("notifiers", True, "none configured: archive only"))
     return results

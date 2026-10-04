@@ -5,6 +5,11 @@ import pytest
 from childdiary_downloader.config import ConfigError, load_config, parse_config
 from tests.conftest import make_config
 
+
+def cfg_accounts() -> list[dict[str, object]]:
+    return [{"username": "u", "password": "p", "children": {}}]
+
+
 MINIMAL = """
 accounts:
   - name: Creche
@@ -25,7 +30,7 @@ def test_env_interpolation_from_dotenv(tmp_path: Path, monkeypatch: pytest.Monke
     (tmp_path / ".env").write_text("CDD_PASSWORD_CRECHE=s3cret\nCDD_TELEGRAM_TOKEN=tok\n")
     cfg = load_config(tmp_path / "config.yaml")
     assert cfg.accounts[0].password == "s3cret"
-    assert cfg.telegram is not None and cfg.telegram.token == "tok"
+    assert [n.url for n in cfg.notifiers] == ["tgram://tok/123/"]
     assert cfg.accounts[0].auth_payload() == {
         "Username": "familia@example.test",
         "Password": "s3cret",
@@ -54,7 +59,8 @@ def test_defaults() -> None:
     cfg = make_config()
     assert cfg.language == "pt"
     assert cfg.timezone == "Europe/Lisbon"
-    assert cfg.telegram is None
+    assert cfg.notifiers == []
+    assert parse_config({"accounts": cfg_accounts()}).max_age_days == 3
     assert cfg.documents.folder == "Documentos"
     assert cfg.documents.subfolders == {"Ementas": ["ementa"]}
     assert cfg.network.request_delay_seconds == 0.5
@@ -90,6 +96,11 @@ def test_routing_accepts_single_name_and_dates() -> None:
         ({"accounts": [{"username": "u"}]}, "Missing field 'password'"),
         ({"telegram": {"token": "t"}}, "Missing field 'chat_id'"),
         ({"telegram": {"token": "t", "chat_id": "1", "max_age_days": -1}}, "max_age_days"),
+        ({"max_age_days": "soon"}, "max_age_days"),
+        ({"notifiers": {"url": "x"}}, "must be a list"),
+        ({"notifiers": [{"type": "sms"}]}, "must be 'telegram' or 'apprise'"),
+        ({"notifiers": [{"type": "apprise"}]}, "Missing field 'url'"),
+        ({"notifiers": [{"url": "ntfy://x", "media": "no"}]}, "media must be"),
         ({"routing": {"child_since": {"Maria": "01/09/2024"}}}, "YYYY-MM-DD"),
         ({"routing": {"groups": {"Sala": 3}}}, "list of names"),
         ({"network": {"request_delay_seconds": "fast"}}, "request_delay_seconds"),
@@ -110,3 +121,20 @@ def test_archive_dir_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert make_config(archive_dir="/from/file").archive_dir == tmp_path / "vol"
     monkeypatch.delenv("CDD_ARCHIVE_DIR")
     assert make_config(archive_dir="/from/file").archive_dir == Path("/from/file")
+
+
+def test_notifiers_list_and_legacy_telegram_combine() -> None:
+    cfg = make_config(
+        telegram={"token": "t", "chat_id": "1", "max_age_days": 7},
+        notifiers=[
+            {"type": "apprise", "url": "ntfy://ntfy.sh/creche", "media": False, "name": "ntfy"},
+            {"type": "telegram", "token": "t2", "chat_id": "2"},
+        ],
+    )
+    assert [(n.url, n.media, n.name) for n in cfg.notifiers] == [
+        ("tgram://t/1/", True, "telegram"),
+        ("ntfy://ntfy.sh/creche", False, "ntfy"),
+        ("tgram://t2/2/", True, "telegram"),
+    ]
+    assert cfg.max_age_days == 7
+    assert make_config(max_age_days=0, telegram={"token": "t", "chat_id": "1"}).max_age_days == 0

@@ -43,10 +43,16 @@ class Account:
 
 
 @dataclass(frozen=True)
-class TelegramConfig:
-    token: str
-    chat_id: str
-    max_age_days: int = DEFAULT_MAX_AGE_DAYS
+class NotifierConfig:
+    """One destination for notifications, as an apprise URL."""
+
+    url: str
+    media: bool = True  # also receives photos, videos and documents
+    name: str = ""
+
+
+def telegram_url(token: str, chat_id: str) -> str:
+    return f"tgram://{token}/{chat_id}/"
 
 
 @dataclass(frozen=True)
@@ -75,7 +81,8 @@ class Config:
     language: str
     timezone: str
     accounts: list[Account]
-    telegram: TelegramConfig | None
+    notifiers: list[NotifierConfig]
+    max_age_days: int
     routing: Routing
     documents: DocumentsConfig
     network: NetworkConfig
@@ -177,16 +184,43 @@ def _parse_accounts(raw: Any) -> list[Account]:
     return accounts
 
 
-def _parse_telegram(raw: Any) -> TelegramConfig | None:
-    if raw is None:
-        return None
-    data = _mapping(raw, "telegram")
-    token = str(_require(data, "token", "telegram"))
-    chat_id = str(_require(data, "chat_id", "telegram"))
-    max_age = data.get("max_age_days", DEFAULT_MAX_AGE_DAYS)
-    if not isinstance(max_age, int) or max_age < 0:
-        raise ConfigError("telegram.max_age_days must be an integer >= 0.")
-    return TelegramConfig(token=token, chat_id=chat_id, max_age_days=max_age)
+def _parse_notifiers(raw_list: Any, legacy_telegram: Any) -> list[NotifierConfig]:
+    """``notifiers:`` entries plus the pre-0.2 ``telegram:`` section."""
+    notifiers: list[NotifierConfig] = []
+    if legacy_telegram is not None:
+        data = _mapping(legacy_telegram, "telegram")
+        token = str(_require(data, "token", "telegram"))
+        chat_id = str(_require(data, "chat_id", "telegram"))
+        notifiers.append(NotifierConfig(url=telegram_url(token, chat_id), name="telegram"))
+    if raw_list is None:
+        return notifiers
+    if not isinstance(raw_list, list):
+        raise ConfigError("'notifiers' must be a list.")
+    for i, item in enumerate(raw_list, start=1):
+        where = f"notifiers[{i}]"
+        data = _mapping(item, where)
+        kind = str(data.get("type") or "apprise").lower()
+        media = data.get("media", True)
+        if not isinstance(media, bool):
+            raise ConfigError(f"{where}.media must be true or false.")
+        if kind == "telegram":
+            token = str(_require(data, "token", where))
+            chat_id = str(_require(data, "chat_id", where))
+            url = telegram_url(token, chat_id)
+        elif kind == "apprise":
+            url = str(_require(data, "url", where))
+        else:
+            raise ConfigError(f"{where}.type must be 'telegram' or 'apprise'.")
+        notifiers.append(NotifierConfig(url=url, media=media, name=str(data.get("name") or kind)))
+    return notifiers
+
+
+def _parse_max_age(data: dict[str, Any]) -> int:
+    legacy: dict[str, Any] = data["telegram"] if isinstance(data.get("telegram"), dict) else {}
+    value = data.get("max_age_days", legacy.get("max_age_days", DEFAULT_MAX_AGE_DAYS))
+    if not isinstance(value, int) or value < 0:
+        raise ConfigError("max_age_days must be an integer >= 0.")
+    return value
 
 
 def _parse_documents(raw: Any, strings: Strings) -> DocumentsConfig:
@@ -236,7 +270,8 @@ def parse_config(data: Any, source: Path | None = None) -> Config:
         language=language,
         timezone=timezone,
         accounts=_parse_accounts(data.get("accounts")),
-        telegram=_parse_telegram(data.get("telegram")),
+        notifiers=_parse_notifiers(data.get("notifiers"), data.get("telegram")),
+        max_age_days=_parse_max_age(data),
         routing=_parse_routing(data.get("routing")),
         documents=_parse_documents(data.get("documents"), strings),
         network=_parse_network(data.get("network")),
