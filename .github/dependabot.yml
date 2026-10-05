@@ -1,0 +1,23 @@
+# Monthly dependency updates, one grouped pull request per ecosystem.
+# Security fixes come separately, as soon as an advisory is published.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
