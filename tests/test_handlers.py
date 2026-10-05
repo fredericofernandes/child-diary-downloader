@@ -401,3 +401,15 @@ def test_process_medias_with_unparseable_dates(
     entry = f.post(created="garbage", display="garbage")
     process_medias(ctx, f.E(entry), f.E(entry).medias, notifier, ["Maria"])
     assert files_under(ctx.root) == ["Maria/unkn/unknown-date/unknown-date_000000_01.jpg"]
+
+
+def test_meal_without_description_has_no_dangling_colon(
+    ctx: ArchiveContext, notifier: RecordingNotifier
+) -> None:
+    entry = f.routine()
+    entry["Meals"] = [
+        {"Title": "Lunch", "Description": None, "MealStatus": "All", "Drink": None},
+        {"Title": "Dinner", "Description": "Iogurte", "MealStatus": None, "Drink": None},
+    ]
+    process_type2(ctx, f.E(entry), notifier, "", ["Maria"])
+    assert "  Almoço — Comeu tudo\n  Lanche da Tarde: Iogurte" in notifier.messages[0]

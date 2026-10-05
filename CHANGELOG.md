@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A daily routine with a meal whose description is `null` failed validation
+  (37 of 5,590 entries in a real archive) and was recorded as failed instead
+  of archived. Missing texts are now treated as empty, and a meal without a
+  description is shown without a dangling colon.
 - Docs, `SECURITY.md` and CLI help still described Telegram as the only
   notifier; the README roadmap listed SQLite state as pending and showed the
   wrong default archive folder.

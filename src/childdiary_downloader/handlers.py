@@ -243,7 +243,7 @@ def process_type2(
             title = s.meal_titles.get(m.title, m.title)
             status = s.meal_status.get(m.meal_status or "", m.meal_status or "")
             drink = s.drink_names.get(m.drink or "", m.drink or "")
-            line = f"  {title}: {m.description}"
+            line = f"  {title}: {m.description}" if m.description else f"  {title}"
             if status:
                 line += f" — {status}"
             if drink:

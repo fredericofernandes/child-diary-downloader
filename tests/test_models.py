@@ -45,3 +45,17 @@ def test_wrong_types_are_reported_with_the_id() -> None:
         parse_entry(raw)
     assert exc.value.entry_id == raw["Id"]
     assert exc.value.error.error_count() == 1
+
+
+def test_null_texts_become_empty_strings() -> None:
+    """Old routines have meals with "Description": null (seen in real data)."""
+    raw = f.routine()
+    raw["Meals"][0]["Description"] = None
+    raw["Meals"][1]["Title"] = None
+    raw["Activities"][0]["Description"] = None
+    raw["ToiletTimes"][0]["type"] = None
+    raw["Medias"] = [{"Id": "m", "Url": "https://x.test/a", "Extension": None}]
+    entry = parse_entry(raw)
+    assert entry.meals[0].description == "" and entry.meals[1].title == ""
+    assert entry.activities[0].description == "" and entry.toilet_times[0].type == ""
+    assert entry.medias[0].extension == ""

@@ -8,11 +8,20 @@ aliases follow the API's PascalCase (and the few camelCase it has).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError
 
 Raw = dict[str, Any]
+
+
+def _none_to_empty(value: Any) -> Any:
+    return "" if value is None else value
+
+
+# The API sends null where a text is missing (a meal without a description,
+# for instance). It means "nothing", so it becomes an empty string.
+Text = Annotated[str, BeforeValidator(_none_to_empty)]
 
 
 class ApiModel(BaseModel):
@@ -31,7 +40,7 @@ class ForItem(ApiModel):
 class Media(ApiModel):
     id: str = Field(alias="Id")
     url: str = Field(alias="Url")
-    extension: str = Field(default="", alias="Extension")
+    extension: Text = Field(default="", alias="Extension")
     display_order: int | None = Field(default=None, alias="DisplayOrder")
 
 
@@ -52,8 +61,8 @@ class Times(ApiModel):
 
 
 class Meal(ApiModel):
-    title: str = Field(default="", alias="Title")
-    description: str = Field(default="", alias="Description")
+    title: Text = Field(default="", alias="Title")
+    description: Text = Field(default="", alias="Description")
     meal_status: str | None = Field(default=None, alias="MealStatus")
     drink: str | None = Field(default=None, alias="Drink")
 
@@ -64,11 +73,11 @@ class SleepTime(ApiModel):
 
 
 class ToiletTime(ApiModel):
-    type: str = ""
+    type: Text = ""
 
 
 class Activity(ApiModel):
-    description: str = Field(default="", alias="Description")
+    description: Text = Field(default="", alias="Description")
 
 
 class Entry(ApiModel):
