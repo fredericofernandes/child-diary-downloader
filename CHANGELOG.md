@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-05
+
+### Fixed
+
+- A daily routine with a meal whose description is `null` failed validation
+  (37 of 5,590 entries in a real archive) and was recorded as failed instead
+  of archived. Missing texts are now treated as empty, and a meal without a
+  description is shown without a dangling colon.
+
 ## [0.2.1] - 2026-10-05
 
 ### Changed
@@ -16,10 +25,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
-- A daily routine with a meal whose description is `null` failed validation
-  (37 of 5,590 entries in a real archive) and was recorded as failed instead
-  of archived. Missing texts are now treated as empty, and a meal without a
-  description is shown without a dangling colon.
 - Docs, `SECURITY.md` and CLI help still described Telegram as the only
   notifier; the README roadmap listed SQLite state as pending and showed the
   wrong default archive folder.
@@ -87,7 +92,8 @@ First public release.
 - Test suite with fictional fixtures (113 tests), ruff, mypy, pre-commit with
   gitleaks, GitHub Actions CI and release workflow.
 
-[Unreleased]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fredericofernandes/child-diary-downloader/releases/tag/v0.1.0

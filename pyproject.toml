@@ -1,6 +1,6 @@
 [project]
 name = "child-diary-downloader"
-version = "0.2.1"
+version = "0.2.2"
 description = "Backup não oficial do ChildDiary: arquiva fotos, vídeos e PDFs dos teus filhos e envia os resumos diários para o Telegram."
 readme = "README.md"
 requires-python = ">=3.12"
