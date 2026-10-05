@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-05
+
 ### Changed
 
 - The project targets families in Portugal: `childdiary setup` proposes
@@ -81,6 +83,7 @@ First public release.
 - Test suite with fictional fixtures (113 tests), ruff, mypy, pre-commit with
   gitleaks, GitHub Actions CI and release workflow.
 
-[Unreleased]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/fredericofernandes/child-diary-downloader/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fredericofernandes/child-diary-downloader/releases/tag/v0.1.0
