@@ -8,7 +8,7 @@
 
 **Backup automático do diário dos teus filhos na app [ChildDiary](https://childdiary.net),
 com resumos diários no Telegram.** Ferramenta não oficial, feita por um pai, para
-famílias em Portugal e na Irlanda.
+famílias em Portugal.
 
 🇬🇧 [English version](README.en.md)
 
@@ -113,7 +113,7 @@ Um exemplo comentado com todas as opções está em
 
 ```yaml
 language: pt                 # ou en
-timezone: Europe/Lisbon      # ou Europe/Dublin
+timezone: Europe/Lisbon      # nos Açores: Atlantic/Azores
 accounts:
   - name: Creche Exemplo
     username: familia.exemplo@example.com
@@ -174,7 +174,8 @@ outra vez. `childdiary status` mostra o que o estado conhece.
 (404), é registado no log e a entrada é dada como feita. O que já estava no
 teu arquivo fica.
 
-**Funciona na Irlanda?** Sim. Usa `language: en` e `timezone: Europe/Dublin`.
+**Posso receber as notificações em inglês?** Sim. Usa `language: en`; as
+pastas por defeito passam a `Documents/Menus`.
 
 **Preciso do exiftool?** Não, mas sem ele as fotos ficam só com o `mtime`
 correcto e as apps de fotos usam a data de importação. A imagem Docker já o

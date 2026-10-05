@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for helping other families keep their children's memories. This page is
-in English so that contributors from Portugal and Ireland can share it.
+in English so that contributors who do not read Portuguese can follow it.
 
 ## Ground rules
 

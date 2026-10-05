@@ -21,11 +21,10 @@ from rich.console import Console
 from rich.table import Table
 
 from childdiary_downloader.api import fetch_entries, login
+from childdiary_downloader.config import DEFAULT_TIMEZONE
 from childdiary_downloader.i18n import SUPPORTED_LANGUAGES
 
 console = Console()
-
-TIMEZONE_BY_LANGUAGE = {"pt": "Europe/Lisbon", "en": "Europe/Dublin"}
 
 
 @dataclass
@@ -244,7 +243,7 @@ def run_wizard(config_file: Path, default_archive: str) -> None:
         type=click.Choice(list(SUPPORTED_LANGUAGES)),
         default="pt",
     )
-    timezone = click.prompt("School timezone (IANA name)", default=TIMEZONE_BY_LANGUAGE[language])
+    timezone = click.prompt("School timezone (IANA name)", default=DEFAULT_TIMEZONE)
     archive_dir = click.prompt("Archive folder", default=default_archive)
 
     accounts: list[dict[str, Any]] = []

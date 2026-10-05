@@ -1,4 +1,4 @@
-"""English (Ireland / international)."""
+"""English."""
 
 from childdiary_downloader.i18n import Strings
 

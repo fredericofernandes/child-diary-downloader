@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The project targets families in Portugal: `childdiary setup` proposes
+  `Europe/Lisbon` whatever the language. `language: en` still gives
+  English notifications and folders.
+
 ### Fixed
 
 - Docs, `SECURITY.md` and CLI help still described Telegram as the only

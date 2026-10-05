@@ -56,7 +56,7 @@ def test_env_var_name_slugs_accents() -> None:
 def test_render_config_is_valid_yaml_and_loads() -> None:
     text = render_config(
         language="en",
-        timezone="Europe/Dublin",
+        timezone="Atlantic/Azores",
         archive_dir="/archive",
         accounts=[
             {

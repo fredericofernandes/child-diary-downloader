@@ -12,7 +12,7 @@ archive_dir: ~/Pictures/Child-Diary
 # Língua das notificações e dos nomes de pastas por defeito: pt ou en.
 language: pt
 
-# Fuso horário da escola (nome IANA). Europe/Lisbon ou Europe/Dublin.
+# Fuso horário da escola (nome IANA). Europe/Lisbon; nos Açores, Atlantic/Azores.
 timezone: Europe/Lisbon
 
 # Entradas mais antigas do que isto (em dias) são arquivadas sem notificar.

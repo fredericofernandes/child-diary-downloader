@@ -8,7 +8,7 @@
 
 **Automatic backup of your children's [ChildDiary](https://childdiary.net)
 diary, with daily summaries on Telegram.** An unofficial tool, built by a
-parent, for families in Portugal and Ireland.
+parent, for families in Portugal.
 
 🇵🇹 [Versão em português](README.md)
 
@@ -111,7 +111,7 @@ A commented example with every option is in
 
 ```yaml
 language: en
-timezone: Europe/Dublin
+timezone: Europe/Lisbon
 accounts:
   - name: Example Crèche
     username: example.family@example.com
