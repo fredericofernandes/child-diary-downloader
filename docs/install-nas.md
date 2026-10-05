@@ -16,7 +16,7 @@ NAS Intel/AMD, nos Synology/QNAP com ARM64 e no Raspberry Pi 4/5 (64 bits).
 4. **Build** e depois **Start**. O estado "Healthy" aparece ao fim de um ou
    dois minutos.
 
-Para a primeira carga completa sem Telegram, abre um terminal no contentor
+Para a primeira carga completa sem notificações, abre um terminal no contentor
 (Container → Terminal) e corre `childdiary run --no-notify`.
 
 ## QNAP (Container Station) e Unraid

@@ -20,7 +20,7 @@ git clone https://github.com/fredericofernandes/child-diary-downloader
 cd child-diary-downloader
 uv sync                      # installs the package and dev tools in .venv
 uv run pre-commit install    # ruff, mypy, gitleaks on every commit
-uv run pytest                # ~110 tests, all offline
+uv run pytest                # all tests run offline
 uv run childdiary --help
 ```
 
@@ -52,7 +52,7 @@ running, not needed for tests.
 | `state.py` | SQLite state: entries, failures, archived files with hashes |
 | `config.py` | config.yaml schema and `${ENV}` interpolation |
 | `i18n/` | every string a family reads; add a language here |
-| `notify/` | `Notifier` protocol; Telegram implementation |
+| `notify/` | `Notifier` protocol; apprise (Telegram, ntfy, email…) and digest mode |
 | `scheduler.py` | `childdiary daemon` loop and health check |
 | `setup_wizard.py`, `checks.py` | first-run wizard and `childdiary check` |
 | `tests/factories.py` | builders for fictional API entries |

@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Docs, `SECURITY.md` and CLI help still described Telegram as the only
+  notifier; the README roadmap listed SQLite state as pending and showed the
+  wrong default archive folder.
+
 ## [0.2.0] - 2026-10-04
 
 ### Changed

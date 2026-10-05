@@ -1,4 +1,4 @@
-"""Command line: ``childdiary run | discover | list-groups``."""
+"""Command line: ``childdiary run | daemon | setup | check | status | verify | ...``."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def main(
     ctx: click.Context, config_file: Path | None, data_dir: Path | None, verbose: bool
 ) -> None:
     """Unofficial ChildDiary backup: archives photos, videos and PDFs and
-    sends the daily summaries to Telegram."""
+    sends the daily summaries to Telegram, ntfy, email and other services."""
     app = App(
         config_file=(config_file or default_config_file()).expanduser(),
         data_dir=(data_dir or default_data_dir()).expanduser(),
@@ -278,10 +278,10 @@ def setup(app: App) -> None:
 
 
 @main.command()
-@click.option("--send-test", is_flag=True, help="Also send a test message to Telegram.")
+@click.option("--send-test", is_flag=True, help="Also send a test message to every notifier.")
 @click.pass_obj
 def check(app: App, send_test: bool) -> None:
-    """Verify the configuration: logins, children IDs, Telegram, exiftool, archive folder."""
+    """Verify the configuration: logins, children IDs, notifiers, exiftool, archive folder."""
     results = run_checks(app.config, send_test_message=send_test)
     for r in results:
         mark = "[green]OK[/green] " if r.ok else "[red]FAIL[/red]"

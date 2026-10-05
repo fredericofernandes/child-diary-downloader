@@ -2,12 +2,15 @@
 
 ## What this tool handles
 
-- Your ChildDiary password and Telegram bot token, read from a `.env` file
-  (created with mode 600) or environment variables, used only to talk to
-  `app.childdiary.net` and `api.telegram.org`.
+- Your ChildDiary password and the credentials of your notification
+  services (Telegram bot token, apprise URLs), read from a `.env` file
+  (created with mode 600) or environment variables. They are used only to
+  talk to `app.childdiary.net` and to the services you configure in
+  `notifiers` (for example `api.telegram.org`, your ntfy server or your
+  SMTP server).
 - Photos, videos and documents of children, written to a folder you choose.
 
-Nothing is sent anywhere else. There is no telemetry.
+Nothing is sent anywhere else: without notifiers, only `app.childdiary.net` is contacted. There is no telemetry.
 
 ## Recommendations
 

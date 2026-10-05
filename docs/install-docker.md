@@ -18,7 +18,8 @@ curl -o config/.env https://raw.githubusercontent.com/fredericofernandes/child-d
 
 ## 2. Configurar
 
-1. `config/.env`: passwords das contas ChildDiary e token/chat do Telegram.
+1. `config/.env`: passwords das contas ChildDiary, token/chat do Telegram e URLs de
+   outros serviços de notificação ([notifiers.md](notifiers.md)).
 2. `config/config.yaml`: crianças, salas, língua. Para descobrir os IDs das
    crianças e os nomes das salas:
 
@@ -34,7 +35,7 @@ docker compose logs -f          # acompanhar
 docker compose ps               # "healthy" quando o daemon está vivo
 ```
 
-Para fazer o primeiro download completo sem inundar o Telegram:
+Para fazer o primeiro download completo sem inundar as notificações:
 
 ```sh
 docker compose run --rm childdiary run --no-notify

@@ -29,9 +29,9 @@ and by day, with the dates written into the photos themselves so Apple
 Photos, Google Photos or Immich place them correctly on the timeline. As a
 bonus, it sends the day's routine to Telegram as soon as the teacher posts it.
 
-ChildDiary's terms of service acknowledge that the children's data belongs to
-their guardians (GDPR) and do not forbid automated access to your own
-account. Use it on your own account only.
+The children's data belongs to their guardians (GDPR). Use it on your own
+account only, and check that your use is in line with
+[ChildDiary's terms of service](https://childdiary.net).
 
 ## What it does
 
@@ -50,7 +50,7 @@ account. Use it on your own account only.
   several services at once ([docs/notifiers.md](docs/notifiers.md), Portuguese).
 - **Runs by itself every day**: Docker with a built-in schedule and health
   check, or launchd, systemd and cron. Remembers what it processed, retries
-  what failed and alerts you on Telegram if something breaks.
+  what failed and alerts you through your notifiers if something breaks.
 - **Good neighbour**: honest User-Agent, pauses between requests, respects
   the server's back-off. Works around an API pagination bug that drops one
   entry at every page boundary.
@@ -59,7 +59,7 @@ Several accounts (one per crèche), several children per account, siblings in
 different schools: one configuration.
 
 ```
-~/Pictures/childdiary/
+~/Pictures/Child-Diary/
 ├── Maria/
 │   ├── 2025/
 │   │   └── 2025-09-15/
@@ -86,7 +86,7 @@ it only archives).
 mkdir -p childdiary/{config,data,archive} && cd childdiary
 curl -O https://raw.githubusercontent.com/fredericofernandes/child-diary-downloader/main/compose.yaml
 docker compose run --rm childdiary setup     # logs in, discovers children and rooms, writes the config
-docker compose run --rm childdiary check     # verifies logins, Telegram and the archive folder
+docker compose run --rm childdiary check     # verifies logins, notifiers and the archive folder
 docker compose run --rm childdiary run --no-notify   # first full download, no notifications
 docker compose up -d                          # from now on, every day at 19:00
 ```
@@ -103,7 +103,7 @@ systemd or cron): [docs/install-python.md](docs/install-python.md).
 `childdiary setup` writes two files:
 
 - `config.yaml`: children, rooms, language, folders. No secrets.
-- `.env`: passwords and the Telegram token, referenced from the YAML as `${NAME}`.
+- `.env`: passwords, the Telegram token and notifier URLs, referenced from the YAML as `${NAME}`.
 
 A commented example with every option is in
 [`config.example.yaml`](config.example.yaml); the full reference in
@@ -134,7 +134,7 @@ notifiers:
 | Command | Purpose |
 |---|---|
 | `childdiary setup` | first-run wizard |
-| `childdiary check [--send-test]` | verifies logins, children IDs, Telegram, exiftool |
+| `childdiary check [--send-test]` | verifies logins, children IDs, notifiers, exiftool |
 | `childdiary run` | downloads what is new, archives and notifies |
 | `childdiary run --no-notify` | archive only (first load, reprocessing) |
 | `childdiary run --dry-run` | shows what it would do, touches nothing |
@@ -177,7 +177,6 @@ and photo apps fall back to the import date. The Docker image includes it.
 
 ## Roadmap
 
-- [ ] SQLite state and typed data model for entries
 - [ ] Direct export to Immich and Apple Photos
 - [ ] A yearly PDF per child (the "yearbook")
 - [ ] Minimal web UI to browse the archive
